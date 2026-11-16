@@ -14,7 +14,10 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -43,11 +46,14 @@ import com.hexafleet.core.hexmath.HexLayout
 import com.hexafleet.feature.board.model.FogVisibility
 import com.hexafleet.feature.board.model.HexBoardUiState
 import com.hexafleet.feature.board.model.HexTileUiModel
+import com.hexafleet.feature.board.model.RadialActionType
 import com.hexafleet.feature.board.model.ShieldDome
+import com.hexafleet.feature.board.model.SpecialActionMode
 import com.hexafleet.feature.board.model.TerrainType
 import com.hexafleet.feature.board.model.TileHighlightState
 import com.hexafleet.feature.board.theme.BoardColors
 import com.hexafleet.feature.board.visuals.ShipVisuals
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
@@ -68,12 +74,17 @@ fun HexBoardCanvas(
     onHexClicked: (HexCoordinate) -> Unit,
     onRotateShip: ((clockwise: Boolean) -> Unit)? = null,
     onDragHover: ((HexCoordinate) -> Unit)? = null,
-    onDragRelease: ((HexCoordinate) -> Unit)? = null
+    onDragRelease: ((HexCoordinate) -> Unit)? = null,
+    onRadialAction: ((coord: HexCoordinate, action: RadialActionType) -> Unit)? = null
 ) {
     // Radar ve Nabız (Pulse) Animasyonları
     val infiniteTransition = rememberInfiniteTransition(label = "HexBoardAnimations")
     val context = LocalContext.current
     val shipBitmaps = remember(context) { ShipVisuals.loadShipBitmaps(context) }
+
+    var activeRadialHex by remember { mutableStateOf<HexCoordinate?>(null) }
+    var activeRadialHoverAction by remember { mutableStateOf<RadialActionType?>(null) }
+    var activeRadialDragDist by remember { mutableFloatStateOf(0f) }
 
     val radarAngle by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -120,7 +131,7 @@ fun HexBoardCanvas(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Transparent)
-            .pointerInput(state.radius, onRotateShip, state.previewShipParts, onDragHover, onDragRelease) {
+            .pointerInput(state.radius, onRotateShip, state.previewShipParts, onDragHover, onDragRelease, onRadialAction) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val w = size.width.toFloat()
@@ -158,14 +169,41 @@ fun HexBoardCanvas(
                     var isDrag = false
                     var currentHex = downHex
                     val touchSlop = 14f
+                    val startTime = System.currentTimeMillis()
+                    var isRadialActive = false
 
                     while (true) {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
 
+                        val dist = hypot(change.position.x - down.position.x, change.position.y - down.position.y)
+
+                        // Uzun basma kontrolü: Saldırı haritasındaysak 260ms sonra altıgen radyal HUD açılır!
+                        if (state.isAttackBoard && onRadialAction != null && !isRadialActive && !isDrag) {
+                            if (System.currentTimeMillis() - startTime >= 260L && downHex.distanceTo(HexCoordinate.ZERO) <= state.radius) {
+                                isRadialActive = true
+                                activeRadialHex = downHex
+                                activeRadialHoverAction = null
+                                activeRadialDragDist = 0f
+                            }
+                        }
+
                         if (!change.pressed) {
                             // Parmak kaldırıldı (Release / Drop)
-                            if (isDrag && onDragRelease != null) {
+                            if (isRadialActive) {
+                                val action = activeRadialHoverAction
+                                if (action != null && activeRadialDragDist >= hexSize * 0.35f) {
+                                    onRadialAction?.invoke(downHex, action)
+                                } else {
+                                    if (downHex.distanceTo(HexCoordinate.ZERO) <= state.radius) {
+                                        onHexClicked(downHex)
+                                    }
+                                }
+                                activeRadialHex = null
+                                activeRadialHoverAction = null
+                                activeRadialDragDist = 0f
+                                isRadialActive = false
+                            } else if (isDrag && onDragRelease != null) {
                                 if (currentHex.distanceTo(HexCoordinate.ZERO) <= state.radius) {
                                     onDragRelease(currentHex)
                                 }
@@ -178,8 +216,28 @@ fun HexBoardCanvas(
                             break
                         }
 
-                        val dist = hypot(change.position.x - down.position.x, change.position.y - down.position.y)
-                        if (dist > touchSlop) {
+                        if (isRadialActive) {
+                            val dx = change.position.x - down.position.x
+                            val dy = change.position.y - down.position.y
+                            val currentDragDist = hypot(dx, dy)
+                            activeRadialDragDist = currentDragDist
+
+                            if (currentDragDist >= hexSize * 0.35f) {
+                                val angleDeg = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+                                val selectedAction = when {
+                                    // Üst Bölge: -150° .. -30° -> ATEŞ ET (1 CP)
+                                    angleDeg in -150f..-30f -> RadialActionType.FIRE
+                                    // Sol Bölge: -150° .. -180° veya 90° .. 180° -> İHA (3 CP)
+                                    angleDeg < -150f || angleDeg > 90f -> RadialActionType.DRONE
+                                    // Sağ Bölge: -30° .. 90° -> KALKAN (2 CP)
+                                    else -> RadialActionType.SHIELD
+                                }
+                                activeRadialHoverAction = selectedAction
+                            } else {
+                                activeRadialHoverAction = null
+                            }
+                            change.consume()
+                        } else if (dist > touchSlop) {
                             isDrag = true
                             val worldX = change.position.x - (w / 2f)
                             val worldY = change.position.y - (h / 2f)
@@ -228,7 +286,7 @@ fun HexBoardCanvas(
             drawHexGridAndTerrain(
                 state = state,
                 cache = cache,
-                mountainBitmap = shipBitmaps["terrain_mountain"],
+                mountainBitmap = shipBitmaps["terrain_coral_reef"] ?: shipBitmaps["terrain_mountain"],
                 radioactiveBitmap = shipBitmaps["hazard_radioactive"],
                 stormBitmap = shipBitmaps["hazard_storm"],
                 pulseAlpha = pulseAlpha,
@@ -247,6 +305,18 @@ fun HexBoardCanvas(
                     stormBitmap = shipBitmaps["hazard_storm"],
                     pulseAlpha = pulseAlpha,
                     stormWaveAngle = stormWaveAngle
+                )
+            }
+
+            // 2.8 KATMAN: SADECE DOST HARİTADA: Düşman İHA Keşif Bölgeleri (Mor Flu Yapı & Canlı Animasyonlu Son İHA)
+            if (!state.isAttackBoard && state.enemyDroneScans.isNotEmpty()) {
+                drawEnemyDroneReconScans(
+                    scans = state.enemyDroneScans,
+                    latestSector = state.lastEnemyDroneSector,
+                    latestCenter = state.lastEnemyDroneCenter,
+                    cache = cache,
+                    pulseAlpha = pulseAlpha,
+                    radarAngle = radarAngle
                 )
             }
 
@@ -282,6 +352,28 @@ fun HexBoardCanvas(
 
             // 6. KATMAN: Patlamalar (HIT), Su Sıçramaları (MISS), İHA Keşifleri, Kalkan Sönümlemeleri ve Sabit Hedefleme İmleci
             drawCombatMarkersAndReticle(state, cache, pulseAlpha)
+
+            // 7. KATMAN: Gemiye Özel Taktiksel Taarruz Önizlemesi (Delta EMP Şoku veya Amiral 5'li Bombardıman)
+            if (state.previewSpecialHexes.isNotEmpty()) {
+                drawSpecialActionPreview(
+                    specialHexes = state.previewSpecialHexes,
+                    specialMode = state.specialMode,
+                    cache = cache,
+                    pulseAlpha = pulseAlpha
+                )
+            }
+
+            // 8. KATMAN: Altıgen Radyal Menü (Radial HUD Wheel - User Requirement C)
+            if (activeRadialHex != null) {
+                drawRadialHudWheel(
+                    centerHex = activeRadialHex!!,
+                    layout = cache.layout,
+                    hexSize = hexSize,
+                    hoveredAction = activeRadialHoverAction,
+                    dragDist = activeRadialDragDist,
+                    pulseAlpha = pulseAlpha
+                )
+            }
         }
     }
 }
@@ -344,39 +436,17 @@ private fun DrawScope.drawHexGridAndTerrain(
 
             drawPath(path = cache.baseHexPath, color = fillColor)
 
-            // Altıgen Çerçeve Çizgisi
-            val strokeColor = when {
-                tile.highlight == TileHighlightState.HIT || tile.highlight == TileHighlightState.SUNK_SHIP ->
-                    BoardColors.CrimsonRed.copy(alpha = 0.65f)
-                tile.highlight == TileHighlightState.SHIELD_ABSORBED ->
-                    BoardColors.ShieldColor.copy(alpha = 0.8f)
-                tile.highlight == TileHighlightState.RECON_DETECTED ->
-                    BoardColors.PurplePrimary
-                isRadioactive ->
-                    Color(0xFF22C55E).copy(alpha = 0.85f)
-                state.isAttackBoard ->
-                    Color(0xFF94A3B8)
-                else ->
-                    Color(0xFF64748B)
-            }
-
-            drawPath(
-                path = cache.baseHexPath,
-                color = strokeColor,
-                style = Stroke(width = 1.6f)
-            )
-
-            // Çevre Engeli İkonları
-            // 1. Dağ / Ada Görseli (User Requirement 1: Ekteki 1. resim profesyonelce yerleştirildi)
+            // Çevre Engeli: Mercan Resifi (Ekteki 4. resim su altı canlı resif dokusu, petek sınırına sıfır taşma ile kırpılmış)
             if (tile.terrain == TerrainType.CORAL_REEF) {
                 if (mountainBitmap != null) {
-                    val mw = cache.hexSize * 1.82f
-                    val mh = mw * (mountainBitmap.height.toFloat() / mountainBitmap.width.toFloat())
-                    drawImage(
-                        image = mountainBitmap,
-                        dstOffset = IntOffset((-mw / 2f).roundToInt(), (-mh / 2f).roundToInt()),
-                        dstSize = IntSize(mw.roundToInt(), mh.roundToInt())
-                    )
+                    clipPath(path = cache.baseHexPath) {
+                        val reefSize = cache.hexSize * 2.02f
+                        drawImage(
+                            image = mountainBitmap,
+                            dstOffset = IntOffset((-reefSize / 2f).roundToInt(), (-reefSize / 2f).roundToInt()),
+                            dstSize = IntSize(reefSize.roundToInt(), reefSize.roundToInt())
+                        )
+                    }
                 } else {
                     drawPath(
                         path = cache.reefPath,
@@ -389,6 +459,30 @@ private fun DrawScope.drawHexGridAndTerrain(
                     )
                 }
             }
+
+            // Altıgen Çerçeve Çizgisi
+            val strokeColor = when {
+                tile.highlight == TileHighlightState.HIT || tile.highlight == TileHighlightState.SUNK_SHIP ->
+                    BoardColors.CrimsonRed.copy(alpha = 0.65f)
+                tile.highlight == TileHighlightState.SHIELD_ABSORBED ->
+                    BoardColors.ShieldColor.copy(alpha = 0.8f)
+                tile.highlight == TileHighlightState.RECON_DETECTED ->
+                    BoardColors.PurplePrimary
+                isRadioactive ->
+                    Color(0xFF22C55E).copy(alpha = 0.85f)
+                tile.terrain == TerrainType.CORAL_REEF ->
+                    BoardColors.CoralReef.copy(alpha = 0.85f)
+                state.isAttackBoard ->
+                    Color(0xFF94A3B8)
+                else ->
+                    Color(0xFF64748B)
+            }
+
+            drawPath(
+                path = cache.baseHexPath,
+                color = strokeColor,
+                style = Stroke(width = 1.6f)
+            )
 
             // 2. Manyetik Fırtına (Mor sis, %20 artırılmış fluluk ve yavaşlatılmış dalgalanma animasyonlu)
             if (showStorm) {
@@ -555,6 +649,145 @@ private fun DrawScope.drawShieldDome(
                 color = Color(0xFFFBBF24), // 1 darbe almış, sarı uyarı barı
                 topLeft = Offset(-barWidth / 2f, -barHeight / 2f),
                 size = androidx.compose.ui.geometry.Size(barWidth, barHeight)
+            )
+        }
+    }
+}
+
+/**
+ * Düşmanın Dost Filo Haritası üzerinde gerçekleştirdiği İHA keşif bölgelerini çizer.
+ * Önceki tüm keşifler peteklerde mor flu (hazy/soft) yapıda kalır.
+ * En son atılan İHA keşfi ise nefes alan nabız ve dönen radar tarama ışını ile canlı ve animasyonludur.
+ */
+private fun DrawScope.drawEnemyDroneReconScans(
+    scans: List<Set<HexCoordinate>>,
+    latestSector: Set<HexCoordinate>,
+    latestCenter: HexCoordinate?,
+    cache: HexPathCache,
+    pulseAlpha: Float,
+    radarAngle: Float
+) {
+    if (scans.isEmpty()) return
+
+    val allScannedCoords = scans.flatten().toSet()
+    val pastCoords = allScannedCoords - latestSector
+
+    // 1. ÖNCEKİ İHA KEŞİF BÖLGELERİ (Sakin, yumuşak mor flu yapı)
+    for (coord in pastCoords) {
+        val pt = cache.layout.hexToPixel(coord)
+        translate(left = pt.x, top = pt.y) {
+            // Flu mor radyal dolgu
+            drawPath(
+                path = cache.baseHexPath,
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFFA855F7).copy(alpha = 0.22f),
+                        Color(0xFF7C3AED).copy(alpha = 0.10f),
+                        Color(0xFF581C87).copy(alpha = 0.03f)
+                    ),
+                    center = Offset.Zero,
+                    radius = cache.hexSize * 1.10f
+                )
+            )
+            // Mor flu altıgen çerçeve
+            drawPath(
+                path = cache.baseHexPath,
+                color = Color(0xFFC084FC).copy(alpha = 0.38f),
+                style = Stroke(width = 1.4f, join = StrokeJoin.Round)
+            )
+            // İnce iç flu kontur
+            drawPath(
+                path = cache.baseHexPath,
+                color = Color(0xFF7C3AED).copy(alpha = 0.18f),
+                style = Stroke(width = 0.8f, join = StrokeJoin.Round)
+            )
+        }
+    }
+
+    // 2. EN SON ATILAN İHA KEŞFİ (Biraz daha canlı, parlak ve animasyonlu)
+    for (coord in latestSector) {
+        val pt = cache.layout.hexToPixel(coord)
+        val isCenter = coord == latestCenter
+        translate(left = pt.x, top = pt.y) {
+            // Canlı, nefes alan (pulseAlpha) mor flu zemin dolgusu
+            drawPath(
+                path = cache.baseHexPath,
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFFA855F7).copy(alpha = if (isCenter) 0.42f + 0.16f * pulseAlpha else 0.28f + 0.12f * pulseAlpha),
+                        Color(0xFF7C3AED).copy(alpha = 0.18f + 0.08f * pulseAlpha),
+                        Color(0xFF4C1D95).copy(alpha = 0.06f)
+                    ),
+                    center = Offset.Zero,
+                    radius = cache.hexSize * 1.15f
+                )
+            )
+            // Canlı neon mor altıgen kontur
+            drawPath(
+                path = cache.baseHexPath,
+                color = Color(0xFFE9D5FF).copy(alpha = 0.50f + 0.35f * pulseAlpha),
+                style = Stroke(width = if (isCenter) 2.6f else 1.8f, join = StrokeJoin.Round)
+            )
+            // Dış parıldayan flu çerçeve
+            drawPath(
+                path = cache.baseHexPath,
+                color = Color(0xFFA855F7).copy(alpha = 0.70f + 0.30f * pulseAlpha),
+                style = Stroke(width = if (isCenter) 3.6f else 2.4f, join = StrokeJoin.Round)
+            )
+        }
+    }
+
+    // 3. EN SON İHA MERKEZİNDE CANLI RADAR VE SONAR DALGALARI (Animasyonlu)
+    if (latestCenter != null) {
+        val centerPt = cache.layout.hexToPixel(latestCenter)
+        translate(left = centerPt.x, top = centerPt.y) {
+            // 1. Canlı genişleyen sonar dalgası (Animasyonlu yayılma)
+            val waveRadius = cache.hexSize * (0.35f + 0.55f * pulseAlpha)
+            drawCircle(
+                color = Color(0xFFC084FC).copy(alpha = ((1f - pulseAlpha) * 0.85f).coerceIn(0f, 1f)),
+                radius = waveRadius,
+                style = Stroke(width = 2.4f)
+            )
+
+            // 2. İkinci sonar dalgası (Küçük canlı nabız)
+            val waveRadius2 = cache.hexSize * (0.20f + 0.30f * pulseAlpha)
+            drawCircle(
+                color = Color(0xFFA855F7).copy(alpha = (0.60f * pulseAlpha)),
+                radius = waveRadius2,
+                style = Stroke(width = 1.8f)
+            )
+
+            // 3. Dönen fütüristik mor radar tarayıcı ışını
+            val rad = Math.toRadians(radarAngle.toDouble())
+            val sweepLen = cache.hexSize * 0.95f
+            val sweepEnd = Offset(
+                (sweepLen * cos(rad)).toFloat(),
+                (sweepLen * sin(rad)).toFloat()
+            )
+            drawLine(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color(0xFFF3E8FF), Color(0xFFA855F7).copy(alpha = 0.7f), Color.Transparent),
+                    start = Offset.Zero,
+                    end = sweepEnd
+                ),
+                start = Offset.Zero,
+                end = sweepEnd,
+                strokeWidth = 2.4f,
+                cap = StrokeCap.Round
+            )
+
+            // 4. Parlak neon İHA radar sensör çekirdeği
+            drawCircle(
+                color = Color(0xFFF3E8FF),
+                radius = cache.hexSize * 0.16f
+            )
+            drawCircle(
+                color = Color(0xFF7C3AED),
+                radius = cache.hexSize * 0.11f
+            )
+            drawCircle(
+                color = Color(0xFFC084FC),
+                radius = cache.hexSize * 0.05f
             )
         }
     }
@@ -1771,4 +2004,247 @@ private fun DrawScope.drawShipRotationHud(
     drawLine(color = tickColor, start = Offset(hudCenter.x + tick1, hudCenter.y), end = Offset(hudCenter.x + tick2, hudCenter.y), strokeWidth = 1.1f)
     drawLine(color = tickColor, start = Offset(hudCenter.x, hudCenter.y - tick2), end = Offset(hudCenter.x, hudCenter.y - tick1), strokeWidth = 1.1f)
     drawLine(color = tickColor, start = Offset(hudCenter.x, hudCenter.y + tick1), end = Offset(hudCenter.x, hudCenter.y + tick2), strokeWidth = 1.1f)
+}
+
+/**
+ * Gemiye Özel Taktiksel Taarruz Önizlemesini çizer (Delta EMP Şoku: 7 petek, Amiral 5'li Bombardıman: 5 petek).
+ */
+private fun DrawScope.drawSpecialActionPreview(
+    specialHexes: List<HexCoordinate>,
+    specialMode: SpecialActionMode,
+    cache: HexPathCache,
+    pulseAlpha: Float
+) {
+    if (specialHexes.isEmpty()) return
+
+    when (specialMode) {
+        SpecialActionMode.EMP_STRIKE -> {
+            val empColor = Color(0xFF06B6D4) // Cyan neon
+            val empPurple = Color(0xFFA855F7) // Purple neon
+            for (coord in specialHexes) {
+                val pt = cache.layout.hexToPixel(coord)
+                translate(left = pt.x, top = pt.y) {
+                    drawPath(
+                        path = cache.baseHexPath,
+                        brush = Brush.radialGradient(
+                            listOf(
+                                empColor.copy(alpha = 0.35f + 0.15f * pulseAlpha),
+                                empPurple.copy(alpha = 0.18f)
+                            )
+                        )
+                    )
+                    drawPath(
+                        path = cache.baseHexPath,
+                        color = empColor.copy(alpha = 0.70f + 0.30f * pulseAlpha),
+                        style = Stroke(width = 2.4f, join = StrokeJoin.Round)
+                    )
+                }
+            }
+            val centerCoord = specialHexes.firstOrNull() ?: return
+            val centerPt = cache.layout.hexToPixel(centerCoord)
+            drawCircle(
+                color = empColor.copy(alpha = 0.75f + 0.25f * pulseAlpha),
+                radius = cache.hexSize * (0.45f + 0.20f * pulseAlpha),
+                center = Offset(centerPt.x, centerPt.y),
+                style = Stroke(width = 2.2f)
+            )
+        }
+        SpecialActionMode.LINE_BARRAGE -> {
+            val barrageColor = BoardColors.CrimsonRed
+            val orangeGlow = Color(0xFFF97316)
+            for (coord in specialHexes) {
+                val pt = cache.layout.hexToPixel(coord)
+                translate(left = pt.x, top = pt.y) {
+                    drawPath(
+                        path = cache.baseHexPath,
+                        brush = Brush.radialGradient(
+                            listOf(
+                                orangeGlow.copy(alpha = 0.35f + 0.15f * pulseAlpha),
+                                barrageColor.copy(alpha = 0.20f)
+                            )
+                        )
+                    )
+                    drawPath(
+                        path = cache.baseHexPath,
+                        color = barrageColor.copy(alpha = 0.80f + 0.20f * pulseAlpha),
+                        style = Stroke(width = 2.6f, join = StrokeJoin.Round)
+                    )
+                }
+
+                val arm = cache.hexSize * 0.25f
+                drawLine(barrageColor.copy(alpha = 0.9f), Offset(pt.x - arm, pt.y), Offset(pt.x + arm, pt.y), strokeWidth = 2.5f)
+                drawLine(barrageColor.copy(alpha = 0.9f), Offset(pt.x, pt.y - arm), Offset(pt.x, pt.y + arm), strokeWidth = 2.5f)
+            }
+            if (specialHexes.size >= 2) {
+                val startPt = cache.layout.hexToPixel(specialHexes.first())
+                val endPt = cache.layout.hexToPixel(specialHexes.last())
+                drawLine(
+                    brush = Brush.linearGradient(listOf(orangeGlow, barrageColor)),
+                    start = Offset(startPt.x, startPt.y),
+                    end = Offset(endPt.x, endPt.y),
+                    strokeWidth = 3f,
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+        SpecialActionMode.NONE -> Unit
+    }
+}
+
+/**
+ * Altıgen Radyal Menü (Radial HUD Wheel - User Requirement C).
+ * Düşman peteğine basılı tutulduğunda açılan fütüristik neon 3 dilimli kontrol kadranı.
+ * 🔴 Üst Dilim: Ateş Et (1 CP)
+ * 🟣 Sol Dilim: İHA Taraması (3 CP)
+ * 🔵 Sağ Dilim: Aegis Kalkanı (2 CP)
+ */
+private fun DrawScope.drawRadialHudWheel(
+    centerHex: HexCoordinate,
+    layout: HexLayout,
+    hexSize: Float,
+    hoveredAction: RadialActionType?,
+    dragDist: Float,
+    pulseAlpha: Float
+) {
+    val centerPt = layout.hexToPixel(centerHex)
+    val cx = centerPt.x
+    val cy = centerPt.y
+
+    val innerR = hexSize * 0.72f
+    val outerR = hexSize * 1.62f
+    val thickness = outerR - innerR
+
+    // 1. Dış Arka Plan ve Neon Halka
+    drawCircle(
+        color = Color(0xDD030712),
+        radius = outerR + 5f,
+        center = Offset(cx, cy)
+    )
+    drawCircle(
+        color = Color(0xFF38BDF8).copy(alpha = 0.35f + 0.20f * pulseAlpha),
+        radius = outerR + 5f,
+        center = Offset(cx, cy),
+        style = Stroke(width = 1.2f)
+    )
+
+    // 2. ÜÇ TAKTİKSEL SEKTÖR
+    // Sektör 1: ÜST (🔴 ATEŞ ET - 1 CP) -> -145° to -35° (sweep 110°)
+    val isFireHovered = hoveredAction == RadialActionType.FIRE
+    val fireColor = BoardColors.CrimsonRed
+    val fireBg = if (isFireHovered) fireColor.copy(alpha = 0.60f) else Color(0xCC1E1B4B)
+    drawArc(
+        color = fireBg,
+        startAngle = -145f,
+        sweepAngle = 110f,
+        useCenter = false,
+        topLeft = Offset(cx - outerR, cy - outerR),
+        size = Size(outerR * 2, outerR * 2),
+        style = Stroke(width = thickness)
+    )
+    drawArc(
+        color = if (isFireHovered) Color.White else fireColor.copy(alpha = 0.85f),
+        startAngle = -145f,
+        sweepAngle = 110f,
+        useCenter = false,
+        topLeft = Offset(cx - outerR, cy - outerR),
+        size = Size(outerR * 2, outerR * 2),
+        style = Stroke(width = if (isFireHovered) 3.5f else 1.8f)
+    )
+
+    // Sektör 2: SOL (🟣 İHA KEŞFİ - 3 CP) -> 95° to 205° (sweep 110°)
+    val isDroneHovered = hoveredAction == RadialActionType.DRONE
+    val droneColor = BoardColors.PurplePrimary
+    val droneBg = if (isDroneHovered) droneColor.copy(alpha = 0.60f) else Color(0xCC1E1B4B)
+    drawArc(
+        color = droneBg,
+        startAngle = 95f,
+        sweepAngle = 110f,
+        useCenter = false,
+        topLeft = Offset(cx - outerR, cy - outerR),
+        size = Size(outerR * 2, outerR * 2),
+        style = Stroke(width = thickness)
+    )
+    drawArc(
+        color = if (isDroneHovered) Color.White else droneColor.copy(alpha = 0.85f),
+        startAngle = 95f,
+        sweepAngle = 110f,
+        useCenter = false,
+        topLeft = Offset(cx - outerR, cy - outerR),
+        size = Size(outerR * 2, outerR * 2),
+        style = Stroke(width = if (isDroneHovered) 3.5f else 1.8f)
+    )
+
+    // Sektör 3: SAĞ (🔵 AEGIS KALKANI - 2 CP) -> -25° to 85° (sweep 110°)
+    val isShieldHovered = hoveredAction == RadialActionType.SHIELD
+    val shieldColor = Color(0xFF0284C7)
+    val shieldBg = if (isShieldHovered) shieldColor.copy(alpha = 0.60f) else Color(0xCC1E1B4B)
+    drawArc(
+        color = shieldBg,
+        startAngle = -25f,
+        sweepAngle = 110f,
+        useCenter = false,
+        topLeft = Offset(cx - outerR, cy - outerR),
+        size = Size(outerR * 2, outerR * 2),
+        style = Stroke(width = thickness)
+    )
+    drawArc(
+        color = if (isShieldHovered) Color.White else shieldColor.copy(alpha = 0.85f),
+        startAngle = -25f,
+        sweepAngle = 110f,
+        useCenter = false,
+        topLeft = Offset(cx - outerR, cy - outerR),
+        size = Size(outerR * 2, outerR * 2),
+        style = Stroke(width = if (isShieldHovered) 3.5f else 1.8f)
+    )
+
+    // 3. Merkez Halka ve Hedef İkonu
+    drawCircle(
+        color = Color(0xFA0B1120),
+        radius = innerR - 2f,
+        center = Offset(cx, cy)
+    )
+    drawCircle(
+        color = Color.White.copy(alpha = 0.65f),
+        radius = innerR - 2f,
+        center = Offset(cx, cy),
+        style = Stroke(width = 1.6f)
+    )
+
+    // 4. Etiket Metinleri (Android nativeCanvas drawText)
+    val midR = (innerR + outerR) / 2f
+    val nativeCanvas = drawContext.canvas.nativeCanvas
+    val textPaint = android.graphics.Paint().apply {
+        isAntiAlias = true
+        textAlign = android.graphics.Paint.Align.CENTER
+        textSize = (hexSize * 0.28f).coerceIn(24f, 38f)
+        typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+    }
+
+    // Üst Yazı: ATEŞ (1 CP)
+    textPaint.color = if (isFireHovered) android.graphics.Color.WHITE else android.graphics.Color.parseColor("#FCA5A5")
+    nativeCanvas.drawText("ATEŞ 1CP", cx, cy - midR + (textPaint.textSize * 0.35f), textPaint)
+
+    // Sol Yazı: İHA (3 CP)
+    val leftRad = Math.toRadians(150.0)
+    val leftX = cx + (midR * cos(leftRad)).toFloat()
+    val leftY = cy + (midR * sin(leftRad)).toFloat() + (textPaint.textSize * 0.35f)
+    textPaint.color = if (isDroneHovered) android.graphics.Color.WHITE else android.graphics.Color.parseColor("#E9D5FF")
+    nativeCanvas.drawText("İHA 3CP", leftX, leftY, textPaint)
+
+    // Sağ Yazı: KALKAN (2 CP)
+    val rightRad = Math.toRadians(30.0)
+    val rightX = cx + (midR * cos(rightRad)).toFloat()
+    val rightY = cy + (midR * sin(rightRad)).toFloat() + (textPaint.textSize * 0.35f)
+    textPaint.color = if (isShieldHovered) android.graphics.Color.WHITE else android.graphics.Color.parseColor("#BAE6FD")
+    nativeCanvas.drawText("KALKAN 2CP", rightX, rightY, textPaint)
+
+    // Merkez Koordinat Metni
+    val centerPaint = android.graphics.Paint().apply {
+        isAntiAlias = true
+        textAlign = android.graphics.Paint.Align.CENTER
+        textSize = (hexSize * 0.24f).coerceIn(20f, 32f)
+        color = android.graphics.Color.WHITE
+        typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+    }
+    nativeCanvas.drawText("(${centerHex.q},${centerHex.r})", cx, cy + (centerPaint.textSize * 0.35f), centerPaint)
 }

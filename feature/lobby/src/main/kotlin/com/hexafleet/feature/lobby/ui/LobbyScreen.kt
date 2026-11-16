@@ -44,8 +44,6 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Landscape
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PrecisionManufacturing
-import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Security
@@ -161,6 +159,8 @@ fun LobbyScreen(
     var hostRadioactiveZones by remember(roomMapRadius) { mutableIntStateOf(when { roomMapRadius <= 5 -> 1; roomMapRadius == 6 -> 2; else -> 3 }) }
     var hostCoralReefs by remember(roomMapRadius) { mutableIntStateOf(when { roomMapRadius <= 5 -> 4; roomMapRadius == 6 -> 5; else -> 6 }) }
     var hostMagneticStorms by remember(roomMapRadius) { mutableIntStateOf(when { roomMapRadius <= 5 -> 4; roomMapRadius == 6 -> 6; else -> 8 }) }
+    var hostMaxEmpStrikes by remember { mutableIntStateOf(1) }
+    var hostMaxLineBarrages by remember { mutableIntStateOf(1) }
 
     // Taktiksel Parametre Bilgi Pop-Up Durumu (User Requirement 3)
     var activeTacticalInfoParam by remember { mutableStateOf<TacticalParamInfo?>(null) }
@@ -186,6 +186,8 @@ fun LobbyScreen(
     var aiRadioactiveZones by remember(aiMapRadius) { mutableIntStateOf(when { aiMapRadius <= 5 -> 1; aiMapRadius == 6 -> 2; else -> 3 }) }
     var aiCoralReefs by remember(aiMapRadius) { mutableIntStateOf(when { aiMapRadius <= 5 -> 4; aiMapRadius == 6 -> 5; else -> 6 }) }
     var aiMagneticStorms by remember(aiMapRadius) { mutableIntStateOf(when { aiMapRadius <= 5 -> 4; aiMapRadius == 6 -> 6; else -> 8 }) }
+    var aiMaxEmpStrikes by remember { mutableIntStateOf(1) }
+    var aiMaxLineBarrages by remember { mutableIntStateOf(1) }
 
     // Lobi Bekleme Odasında 2. Oyuncu bağlandığında geri sayım
     LaunchedEffect(isGuestConnected) {
@@ -200,7 +202,9 @@ fun LobbyScreen(
                 maxShieldDomes = hostMaxShields,
                 radioactiveZonesCount = hostRadioactiveZones,
                 coralReefCount = hostCoralReefs,
-                magneticStormCount = hostMagneticStorms
+                magneticStormCount = hostMagneticStorms,
+                maxEmpStrikes = hostMaxEmpStrikes,
+                maxLineBarrages = hostMaxLineBarrages
             )
             onStartOnlineGame(activeWaitingCode, true, roomTurnDuration, roomMapRadius, roomEnableHazards, hostRules)
         }
@@ -346,11 +350,12 @@ fun LobbyScreen(
                                     )
                                     Spacer(modifier = Modifier.width(7.dp))
                                 }
-                                Icon(
-                                    imageVector = Icons.Default.Public,
+                                Image(
+                                    painter = painterResource(com.hexafleet.feature.lobby.R.drawable.ic_gamepad_multiplayer),
                                     contentDescription = null,
-                                    modifier = Modifier.size(17.dp),
-                                    tint = if (isOnlineSelected) Color(0xFF7C3AED) else BoardColors.TextSecondary
+                                    modifier = Modifier.size(20.dp),
+                                    contentScale = ContentScale.Fit,
+                                    alpha = if (isOnlineSelected) 1f else 0.65f
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
@@ -394,11 +399,11 @@ fun LobbyScreen(
                                     )
                                     Spacer(modifier = Modifier.width(7.dp))
                                 }
-                                Icon(
-                                    imageVector = Icons.Default.PrecisionManufacturing,
+                                Image(
+                                    painter = painterResource(com.hexafleet.feature.lobby.R.drawable.ic_ai_robot_avatar),
                                     contentDescription = null,
-                                    modifier = Modifier.size(17.dp),
-                                    tint = if (isAiSelected) Color(0xFFE11D48) else BoardColors.TextSecondary
+                                    modifier = Modifier.size(20.dp),
+                                    contentScale = ContentScale.Fit
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
@@ -536,6 +541,8 @@ fun LobbyScreen(
                                 radioactiveZones = hostRadioactiveZones,
                                 coralReefs = hostCoralReefs,
                                 magneticStorms = hostMagneticStorms,
+                                maxEmpStrikes = hostMaxEmpStrikes,
+                                maxLineBarrages = hostMaxLineBarrages,
                                 isTablet = isTabletLayout,
                                 onTogglePin = { isPinEnabled = it },
                                 onPinChanged = { if (it.length <= 4) hostPin = it },
@@ -547,6 +554,8 @@ fun LobbyScreen(
                                 onRadioactiveZonesChanged = { hostRadioactiveZones = it },
                                 onCoralReefsChanged = { hostCoralReefs = it },
                                 onMagneticStormsChanged = { hostMagneticStorms = it },
+                                onMaxEmpStrikesChanged = { hostMaxEmpStrikes = it },
+                                onMaxLineBarragesChanged = { hostMaxLineBarrages = it },
                                 onInfoClick = { activeTacticalInfoParam = getTacticalParamInfo(it) },
                                 onCopyCode = {
                                     clipboardManager.setText(AnnotatedString(generatedRoomCode))
@@ -646,6 +655,8 @@ fun LobbyScreen(
                     radioactiveZones = aiRadioactiveZones,
                     coralReefs = aiCoralReefs,
                     magneticStorms = aiMagneticStorms,
+                    maxEmpStrikes = aiMaxEmpStrikes,
+                    maxLineBarrages = aiMaxLineBarrages,
                     isTablet = isTabletLayout,
                     onDifficultySelected = { selectedAiDifficulty = it },
                     onRadiusChanged = { aiMapRadius = it },
@@ -654,13 +665,17 @@ fun LobbyScreen(
                     onRadioactiveZonesChanged = { aiRadioactiveZones = it },
                     onCoralReefsChanged = { aiCoralReefs = it },
                     onMagneticStormsChanged = { aiMagneticStorms = it },
+                    onMaxEmpStrikesChanged = { aiMaxEmpStrikes = it },
+                    onMaxLineBarragesChanged = { aiMaxLineBarrages = it },
                     onInfoClick = { activeTacticalInfoParam = getTacticalParamInfo(it) },
                     onStartAiBattle = {
                         val aiRules = GameCustomRules(
                             maxShieldDomes = aiMaxShields,
                             radioactiveZonesCount = aiRadioactiveZones,
                             coralReefCount = aiCoralReefs,
-                            magneticStormCount = aiMagneticStorms
+                            magneticStormCount = aiMagneticStorms,
+                            maxEmpStrikes = aiMaxEmpStrikes,
+                            maxLineBarrages = aiMaxLineBarrages
                         )
                         onStartAiGame(selectedAiDifficulty, aiMapRadius, aiEnableHazards, aiRules)
                     }
@@ -959,6 +974,8 @@ private fun HostRoomConfigCard(
     radioactiveZones: Int,
     coralReefs: Int,
     magneticStorms: Int,
+    maxEmpStrikes: Int = 1,
+    maxLineBarrages: Int = 1,
     isTablet: Boolean = false,
     onTogglePin: (Boolean) -> Unit,
     onPinChanged: (String) -> Unit,
@@ -970,6 +987,8 @@ private fun HostRoomConfigCard(
     onRadioactiveZonesChanged: (Int) -> Unit,
     onCoralReefsChanged: (Int) -> Unit,
     onMagneticStormsChanged: (Int) -> Unit,
+    onMaxEmpStrikesChanged: (Int) -> Unit = {},
+    onMaxLineBarragesChanged: (Int) -> Unit = {},
     onInfoClick: (TacticalParamType) -> Unit = {},
     onCopyCode: () -> Unit,
     onCreateLobby: () -> Unit
@@ -1251,6 +1270,30 @@ private fun HostRoomConfigCard(
                                             accentColor = Color(0xFF16A34A),
                                             onValueChange = onRadioactiveZonesChanged,
                                             onInfoClick = { onInfoClick(TacticalParamType.RADIOACTIVE) }
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        TacticalParameterStepper(
+                                            label = "Delta EMP Şoku",
+                                            value = maxEmpStrikes,
+                                            range = 0..3,
+                                            accentColor = Color(0xFF06B6D4),
+                                            onValueChange = onMaxEmpStrikesChanged,
+                                            onInfoClick = { onInfoClick(TacticalParamType.EMP) }
+                                        )
+                                    }
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        TacticalParameterStepper(
+                                            label = "Amiral 5'li Salvo",
+                                            value = maxLineBarrages,
+                                            range = 0..3,
+                                            accentColor = BoardColors.CrimsonRed,
+                                            onValueChange = onMaxLineBarragesChanged,
+                                            onInfoClick = { onInfoClick(TacticalParamType.BARRAGE) }
                                         )
                                     }
                                 }
@@ -1544,6 +1587,30 @@ private fun HostRoomConfigCard(
                             }
                         }
 
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                TacticalParameterStepper(
+                                    "Delta EMP",
+                                    maxEmpStrikes,
+                                    0..3,
+                                    Color(0xFF06B6D4),
+                                    onMaxEmpStrikesChanged,
+                                    onInfoClick = { onInfoClick(TacticalParamType.EMP) }
+                                )
+                            }
+                            Box(modifier = Modifier.weight(1f)) {
+                                TacticalParameterStepper(
+                                    "Amiral Salvo",
+                                    maxLineBarrages,
+                                    0..3,
+                                    BoardColors.CrimsonRed,
+                                    onMaxLineBarragesChanged,
+                                    onInfoClick = { onInfoClick(TacticalParamType.BARRAGE) }
+                                )
+                            }
+                        }
+
                         if (enableHazards) {
                             Spacer(modifier = Modifier.height(3.dp))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1736,12 +1803,21 @@ private fun LobbyBrowserView(
                                             ),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(
-                                            imageVector = if (room.isPinProtected) Icons.Default.Lock else Icons.Default.Public,
-                                            contentDescription = null,
-                                            tint = if (room.isPinProtected) Color(0xFFD97706) else BoardColors.PurplePrimary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
+                                        if (room.isPinProtected) {
+                                            Icon(
+                                                imageVector = Icons.Default.Lock,
+                                                contentDescription = null,
+                                                tint = Color(0xFFD97706),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        } else {
+                                            Image(
+                                                painter = painterResource(com.hexafleet.feature.lobby.R.drawable.ic_gamepad_multiplayer),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(24.dp),
+                                                contentScale = ContentScale.Fit
+                                            )
+                                        }
                                     }
 
                                     Spacer(modifier = Modifier.width(12.dp))
@@ -2067,6 +2143,8 @@ private fun VsAiConfigCard(
     radioactiveZones: Int,
     coralReefs: Int,
     magneticStorms: Int,
+    maxEmpStrikes: Int = 1,
+    maxLineBarrages: Int = 1,
     isTablet: Boolean = false,
     onDifficultySelected: (AiDifficulty) -> Unit,
     onRadiusChanged: (Int) -> Unit,
@@ -2075,6 +2153,8 @@ private fun VsAiConfigCard(
     onRadioactiveZonesChanged: (Int) -> Unit,
     onCoralReefsChanged: (Int) -> Unit,
     onMagneticStormsChanged: (Int) -> Unit,
+    onMaxEmpStrikesChanged: (Int) -> Unit = {},
+    onMaxLineBarragesChanged: (Int) -> Unit = {},
     onInfoClick: (TacticalParamType) -> Unit = {},
     onStartAiBattle: () -> Unit
 ) {
@@ -2124,15 +2204,15 @@ private fun VsAiConfigCard(
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Surface(
                                 shape = CircleShape,
-                                color = BoardColors.CrimsonRed.copy(alpha = 0.12f),
-                                modifier = Modifier.size(24.dp)
+                                color = Color(0xFF0284C7).copy(alpha = 0.12f),
+                                modifier = Modifier.size(28.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.PrecisionManufacturing,
+                                    Image(
+                                        painter = painterResource(com.hexafleet.feature.lobby.R.drawable.ic_ai_robot_avatar),
                                         contentDescription = null,
-                                        tint = BoardColors.CrimsonRed,
-                                        modifier = Modifier.size(15.dp)
+                                        modifier = Modifier.size(22.dp),
+                                        contentScale = ContentScale.Fit
                                     )
                                 }
                             }
@@ -2342,6 +2422,30 @@ private fun VsAiConfigCard(
                                     }
                                 }
 
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        TacticalParameterStepper(
+                                            "Delta EMP Şoku",
+                                            maxEmpStrikes,
+                                            0..3,
+                                            Color(0xFF06B6D4),
+                                            onMaxEmpStrikesChanged,
+                                            onInfoClick = { onInfoClick(TacticalParamType.EMP) }
+                                        )
+                                    }
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        TacticalParameterStepper(
+                                            "Amiral 5'li Salvo",
+                                            maxLineBarrages,
+                                            0..3,
+                                            BoardColors.CrimsonRed,
+                                            onMaxLineBarragesChanged,
+                                            onInfoClick = { onInfoClick(TacticalParamType.BARRAGE) }
+                                        )
+                                    }
+                                }
+
                                 if (enableHazards) {
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2387,7 +2491,12 @@ private fun VsAiConfigCard(
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.PrecisionManufacturing, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            Image(
+                                painter = painterResource(com.hexafleet.feature.lobby.R.drawable.ic_ai_robot_avatar),
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                contentScale = ContentScale.Fit
+                            )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 "YAPAY ZEKAYA KARŞI SAVAŞI BAŞLAT",
@@ -2563,6 +2672,30 @@ private fun VsAiConfigCard(
                             }
                         }
 
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                TacticalParameterStepper(
+                                    "Delta EMP",
+                                    maxEmpStrikes,
+                                    0..3,
+                                    Color(0xFF06B6D4),
+                                    onMaxEmpStrikesChanged,
+                                    onInfoClick = { onInfoClick(TacticalParamType.EMP) }
+                                )
+                            }
+                            Box(modifier = Modifier.weight(1f)) {
+                                TacticalParameterStepper(
+                                    "Amiral Salvo",
+                                    maxLineBarrages,
+                                    0..3,
+                                    BoardColors.CrimsonRed,
+                                    onMaxLineBarragesChanged,
+                                    onInfoClick = { onInfoClick(TacticalParamType.BARRAGE) }
+                                )
+                            }
+                        }
+
                         if (enableHazards) {
                             Spacer(modifier = Modifier.height(3.dp))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2606,7 +2739,12 @@ private fun VsAiConfigCard(
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.PrecisionManufacturing, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Image(
+                                painter = painterResource(com.hexafleet.feature.lobby.R.drawable.ic_ai_robot_avatar),
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp),
+                                contentScale = ContentScale.Fit
+                            )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 "YAPAY ZEKAYA KARŞI SAVAŞI BAŞLAT",
@@ -2754,7 +2892,9 @@ enum class TacticalParamType {
     SHIELD,
     RADIOACTIVE,
     REEF,
-    STORM
+    STORM,
+    EMP,
+    BARRAGE
 }
 
 data class TacticalParamInfo(
@@ -2791,13 +2931,13 @@ fun getTacticalParamInfo(type: TacticalParamType): TacticalParamInfo {
             icon = Icons.Default.Warning
         )
         TacticalParamType.REEF -> TacticalParamInfo(
-            title = "Karlı Zirve / Mercan Resifi",
-            subtitle = "Geçilmez Doğal Coğrafi Engel",
+            title = "Mercan Resifi",
+            subtitle = "Geçilmez Doğal Deniz Resifi",
             badge = "Doğal Siper & Engel",
             accentColor = BoardColors.CoralReef,
-            description = "Harita üzerinde yükselen sarp karlı dağ zirveleri ve geçilmez kaya resifleridir.",
-            tacticalImpact = "Ne dost ne düşman gemileri bu peteklere konuşlandırılamaz. Düşmanın düz hat torpido ve su üstü atışları bu dağlara çarparak engellenir.",
-            strategicTip = "Dağların arkasını doğal bir siper olarak kullanarak filonuzu düşman torpido hatlarından saklayabilirsiniz.",
+            description = "Deniz tabanından yükselen renkli ve sarp mercan resifleridir. Geçit vermeyen doğal su altı kayalık bariyeri oluşturur.",
+            tacticalImpact = "Ne dost ne düşman gemileri bu peteklere konuşlandırılamaz. Düşmanın düz hat torpido ve su üstü atışları bu mercan resiflerine çarparak engellenir.",
+            strategicTip = "Mercan resiflerinin arkasını doğal bir siper olarak kullanarak filonuzu düşman torpido hatlarından saklayabilirsiniz.",
             icon = Icons.Default.Landscape
         )
         TacticalParamType.STORM -> TacticalParamInfo(
@@ -2809,6 +2949,26 @@ fun getTacticalParamInfo(type: TacticalParamType): TacticalParamInfo {
             tacticalImpact = "SADECE sizin haritanızda görünür; düşman fırtınanın nerede olduğunu asla göremez! Fırtına içine isabet eden düşman atışlarının hasarı emilir ve radar parazitlenir.",
             strategicTip = "Fırtına bölgelerini gizli bir koruma hattı gibi kullanarak gemilerinizin omurgasını fırtına içine konuşlandırabilirsiniz.",
             icon = Icons.Default.ElectricBolt
+        )
+        TacticalParamType.EMP -> TacticalParamInfo(
+            title = "Delta EMP İyon Şoku",
+            subtitle = "Kalkan Çökertme & 1 CP Silme (0 CP)",
+            badge = "Delta Kruvazörü Özel",
+            accentColor = Color(0xFF06B6D4),
+            description = "Delta Taarruz Kruvazörü hayattayken kullanılabilen 7 peteklik yüksek güçlü elektromanyetik darbedir.",
+            tacticalImpact = "Hedef sektördeki düşman Aegis Kalkanı'nı anında çökertir. Eğer sektörde düşman gemisi varsa, rakibin bir sonraki turundaki Komut Puanı (CP) 3 yerine 2'ye düşer.",
+            strategicTip = "Düşman kalkan açtığında doğrudan kalkanı delmek veya kritik turlarda rakibin hamle sayısını kısıtlamak için kullanın.",
+            icon = Icons.Default.ElectricBolt
+        )
+        TacticalParamType.BARRAGE -> TacticalParamInfo(
+            title = "Amiral Ağır Bombardımanı",
+            subtitle = "5 Peteklik Doğrusal Süpürme (3 CP)",
+            badge = "Amiral Zırhlısı Özel",
+            accentColor = BoardColors.CrimsonRed,
+            description = "Amiral Zırhlısı hayattayken kullanılabilen, altıgen eksen boyunca ardışık 5 peteği aynı anda vuran devasa top salvosudur.",
+            tacticalImpact = "Havadan bombardıman yapıldığı için mercan resifleri mermileri durduramaz. Geniş deniz koridorlarında saklanan gemileri tek hamlede tarayıp vurur.",
+            strategicTip = "Düşmanın uzun gemilerini (Amiral/İHA) veya resif arkasına gizlenmiş filoları süpürmek için maçın dönüm noktalarında ateşleyin.",
+            icon = Icons.Default.AutoAwesome
         )
     }
 }

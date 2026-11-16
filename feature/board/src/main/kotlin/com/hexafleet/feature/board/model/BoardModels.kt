@@ -104,13 +104,15 @@ data class RadioactiveZone(
 )
 
 /**
- * Oyun Başında Ayarlanabilir Taktiksel Parametreler (Kalkan, Radyoaktif Bölge, Resif, Fırtına).
+ * Oyun Başında Ayarlanabilir Taktiksel Parametreler (Kalkan, Radyoaktif Bölge, Resif, Fırtına, EMP, Bombardıman).
  */
 data class GameCustomRules(
     val maxShieldDomes: Int = 1,          // 0 - 5 (Standart: 1, Devasa: 2)
     val radioactiveZonesCount: Int = 1,   // 0 - 5 (R=5: 1, R=6: 2, R=7: 3)
     val coralReefCount: Int = 4,          // 0 - 10 (R=5: 4, R=6: 5, R=7: 6)
-    val magneticStormCount: Int = 4       // 0 - 10 (R=5: 4, R=6: 6, R=7: 8)
+    val magneticStormCount: Int = 4,      // 0 - 10 (R=5: 4, R=6: 6, R=7: 8)
+    val maxEmpStrikes: Int = 1,           // 0 - 3 (Delta Kruvazörü EMP İyon Şoku, Varsayılan: 1)
+    val maxLineBarrages: Int = 1          // 0 - 3 (Amiral Zırhlısı Ağır Bombardımanı, Varsayılan: 1)
 ) {
     companion object {
         fun defaultForRadius(radius: Int): GameCustomRules {
@@ -134,10 +136,30 @@ data class GameCustomRules(
                 maxShieldDomes = shields,
                 radioactiveZonesCount = radioactive,
                 coralReefCount = reefs,
-                magneticStormCount = storms
+                magneticStormCount = storms,
+                maxEmpStrikes = 1,
+                maxLineBarrages = 1
             )
         }
     }
+}
+
+/**
+ * Gemiye Özel Taktiksel Taarruz Modu.
+ */
+enum class SpecialActionMode {
+    NONE,
+    EMP_STRIKE,     // Delta Kruvazörü: 7 peteklik sektör EMP Şoku (0 CP)
+    LINE_BARRAGE    // Amiral Zırhlısı: 5 peteklik hat salvosu (3 CP)
+}
+
+/**
+ * Altıgen Radyal Menü (Radial HUD Wheel) Seçim Türleri.
+ */
+enum class RadialActionType {
+    FIRE,       // 🔴 Üst Dilim: Ateş Et (1 CP)
+    DRONE,      // 🟣 Sol Dilim: İHA Taraması (3 CP)
+    SHIELD      // 🔵 Sağ Dilim: Aegis Kalkanı (2 CP)
 }
 
 /**
@@ -169,7 +191,7 @@ sealed class TacticalGameMode {
 
     data class VsAi(
         val difficulty: AiDifficulty = AiDifficulty.VETERAN,
-        val turnDurationSeconds: Int = 45
+        val turnDurationSeconds: Int = 0 // Yapay zekaya karşı varsayılan süresiz (0 = zaman kısıtlamasız)
     ) : TacticalGameMode()
 }
 
@@ -192,7 +214,11 @@ data class HexBoardUiState(
     val shieldAbsorbedCoords: Set<HexCoordinate> = emptySet(),
     val radioactiveCoords: Set<HexCoordinate> = emptySet(), // Sadece dost haritada taktiksel yeşil sis
     val lastEnemyAttacks: List<HexCoordinate> = emptyList(), // Son turda düşmanın ateş ettiği koordinatlar (Pulse animation)
-    val lastEnemyDroneCenter: HexCoordinate? = null // Son turda düşmanın İHA taradığı merkez (Radar pulse)
+    val lastEnemyDroneCenter: HexCoordinate? = null, // Son turda düşmanın İHA taradığı merkez (Radar pulse)
+    val enemyDroneScans: List<Set<HexCoordinate>> = emptyList(), // Düşmanın yaptığı tüm İHA keşif sektörleri (Mor flu)
+    val lastEnemyDroneSector: Set<HexCoordinate> = emptySet(), // Son İHA keşif sektörü (Daha canlı ve animasyonlu)
+    val previewSpecialHexes: List<HexCoordinate> = emptyList(), // EMP veya 5'li Bombardıman önizleme petekleri
+    val specialMode: SpecialActionMode = SpecialActionMode.NONE
 )
 
 /**
@@ -227,6 +253,16 @@ data class DualBattleUiState(
     // Düşmanın Son Turdaki Hamleleri (Animasyon ve Görsel Farkındalık için)
     val lastEnemyAttacks: List<HexCoordinate> = emptyList(),
     val lastEnemyDroneCenter: HexCoordinate? = null,
+    val enemyDroneScans: List<Set<HexCoordinate>> = emptyList(), // Düşmanın yaptığı tüm İHA keşif sektörleri
+    // Gemiye Özel Taktiksel Taarruz Hakları (EMP & Bombardıman) ve Cezalar
+    val playerRemainingEmpStrikes: Int = customRules.maxEmpStrikes,
+    val enemyRemainingEmpStrikes: Int = customRules.maxEmpStrikes,
+    val playerRemainingLineBarrages: Int = customRules.maxLineBarrages,
+    val enemyRemainingLineBarrages: Int = customRules.maxLineBarrages,
+    val playerPendingCpPenalty: Int = 0,
+    val enemyPendingCpPenalty: Int = 0,
+    val activeSpecialMode: SpecialActionMode = SpecialActionMode.NONE,
+    val lineBarrageDirectionIndex: Int = 0, // 0: E-W, 1: NE-SW, 2: NW-SE
     // Seçimler ve Yerleştirme Durumu
     val selectedDeploymentCategory: String = "SHIP", // "SHIP" veya "RADIOACTIVE"
     val selectedDeploymentShipId: String = "corvette_friendly",
@@ -287,7 +323,9 @@ data class DualBattleUiState(
             shieldAbsorbedCoords = friendlyShieldAbsorbedCoords,
             radioactiveCoords = radCoords,
             lastEnemyAttacks = lastEnemyAttacks,
-            lastEnemyDroneCenter = lastEnemyDroneCenter
+            lastEnemyDroneCenter = lastEnemyDroneCenter,
+            enemyDroneScans = enemyDroneScans,
+            lastEnemyDroneSector = enemyDroneScans.lastOrNull() ?: emptySet()
         )
     }
 
@@ -332,6 +370,27 @@ data class DualBattleUiState(
         // Saldırı haritasında yalnızca BATIRILMIŞ düşman gemilerinin gövdesi çizilir!
         val visibleEnemyShips = enemyShips.filter { it.isSunk }
 
+        val specialPreviewCoords = when (activeSpecialMode) {
+            SpecialActionMode.EMP_STRIKE -> {
+                if (selectedTargetCoord != null) {
+                    (selectedTargetCoord.ring(1) + selectedTargetCoord).filter { it.distanceTo(HexCoordinate.ZERO) <= radius }
+                } else emptyList()
+            }
+            SpecialActionMode.LINE_BARRAGE -> {
+                if (selectedTargetCoord != null) {
+                    val dir = HexCoordinate.DIRECTIONS[lineBarrageDirectionIndex % 3]
+                    listOf(
+                        selectedTargetCoord - dir * 2,
+                        selectedTargetCoord - dir,
+                        selectedTargetCoord,
+                        selectedTargetCoord + dir,
+                        selectedTargetCoord + dir * 2
+                    ).filter { it.distanceTo(HexCoordinate.ZERO) <= radius }
+                } else emptyList()
+            }
+            SpecialActionMode.NONE -> emptyList()
+        }
+
         return HexBoardUiState(
             radius = radius,
             tiles = tileMap,
@@ -341,7 +400,9 @@ data class DualBattleUiState(
             isFogOfWarActive = true,
             isRadarSweepActive = isRadarActive,
             shieldDome = null, // Düşman saldırı haritasında kalkan gösterilmez!
-            shieldAbsorbedCoords = enemyShieldAbsorbedCoords
+            shieldAbsorbedCoords = enemyShieldAbsorbedCoords,
+            previewSpecialHexes = specialPreviewCoords,
+            specialMode = activeSpecialMode
         )
     }
 }

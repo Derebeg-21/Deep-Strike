@@ -149,6 +149,7 @@ object ShipVisuals {
             "flagship_friendly" to BitmapFactory.decodeResource(res, R.drawable.ship_flagship).asImageBitmap(),
             "flagship_enemy" to BitmapFactory.decodeResource(res, R.drawable.ship_flagship_enemy).asImageBitmap(),
             "terrain_mountain" to BitmapFactory.decodeResource(res, R.drawable.terrain_mountain).asImageBitmap(),
+            "terrain_coral_reef" to BitmapFactory.decodeResource(res, R.drawable.terrain_coral_reef).asImageBitmap(),
             "hazard_radioactive" to BitmapFactory.decodeResource(res, R.drawable.hazard_radioactive).asImageBitmap(),
             "hazard_storm" to BitmapFactory.decodeResource(res, R.drawable.hazard_storm).asImageBitmap(),
             "board_ocean_waves" to BitmapFactory.decodeResource(res, R.drawable.board_ocean_waves_bg).asImageBitmap()

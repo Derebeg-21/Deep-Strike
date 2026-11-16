@@ -82,6 +82,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -89,6 +90,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.hexafleet.feature.board.settings.HexaFleetSettings
 import com.hexafleet.feature.board.theme.BoardColors
 import kotlin.math.roundToInt
@@ -456,28 +458,28 @@ private fun FleetAndAbilitiesSection() {
 
         InfoCard(
             title = "1. ⚡ Korvet (Hayalet Korvet - 2 Petek)",
-            description = "2 peteklik yüksek manevra kabiliyetine sahip hücumbottur. Harita kenarlarına ve resif aralarına gizlenmesi en kolay stealth gemidir.",
+            description = "2 peteklik yüksek manevra kabiliyetine sahip hücumbottur. Harita kenarlarına ve resif aralarına gizlenmesi en kolay stealth gemidir.\n• ⚡ Pasif Yetenek — Hayalet Gövde (Stealth Hull): Düşmanın 7 peteklik İHA radar taraması Korvet'in üzerinden geçse dahi radar %50 olasılıkla sinyal yakalayamaz (tamamen gizlenir). Bu gerçek %50 olasılık tüm oyun modlarında (Yapay Zeka ve Çok Oyunculu) geçerlidir.",
             iconTint = BoardColors.PurplePrimary,
             imageRes = R.drawable.ship_corvette
         )
 
         InfoCard(
             title = "2. 🔺 Delta (Delta Taarruz Kruvazörü - 3 Petek Üçgen)",
-            description = "1 önde (burun) ve 2 arkada (sol/sağ kanat) eşkenar üçgen gövdeye sahiptir. Altıgen ızgarada 6 farklı yöne dönebilir; doğrusal olmayan delta geometrisiyle tespit edilmesi ve batırılması zordur.",
+            description = "1 önde (burun) ve 2 arkada (sol/sağ kanat) eşkenar üçgen gövdeye sahiptir. Doğrusal olmayan delta geometrisiyle tespit edilmesi zordur.\n• ⚡ Aktif Yetenek — İyon Şoku / EMP Darbesi (0 CP): Düşman haritası sol üst köşesindeki özel rozetten tetiklenir (Varsayılan maç başı 1 hak, oda ayarlarından 0-3 arası belirlenebilir). Seçilen 7 peteklik sektöre iyon şoku yollar: Bölgedeki düşman Kalkanı anında çöker; bölgede düşman gemisi varsa rakibin bir sonraki turdaki Komut Puanı (CP) 3 yerine 2'ye düşer (elektronik arıza). Delta Kruvazörü batarsa bu yetenek devre dışı kalır.",
             iconTint = BoardColors.CrimsonRed,
             imageRes = R.drawable.ship_delta
         )
 
         InfoCard(
             title = "3. 📡 İHA G. (İHA Taşıyıcısı - 3 Petek)",
-            description = "3 doğrusal peteklik radar ve taktiksel keşif gemisidir. Radar sinyallerini güçlendirir ve 7 peteklik sektör taramalarını koordine eder.",
+            description = "3 doğrusal peteklik filo istihbarat ve radar üssüdür.\n• 📡 Kritik Bağlantı — Radar İstihbarat Merkezi (High-Value Target): Filonun İHA yeteneği doğrudan bu gemiye bağlanmıştır. Eğer İHA Taşıyıcısı batırılırsa radar istasyonu imha edilir ve İHA keşif kabiliyeti tamamen kilitlenir (kullanılamaz). Oyuncular bu gemiyi korumak için özel savunma stratejileri kurmalıdır.",
             iconTint = BoardColors.NavyAccent,
             imageRes = R.drawable.ship_carrier
         )
 
         InfoCard(
             title = "4. 🛳️ Amiral (Amiral Zırhlısı - 4 Petek)",
-            description = "Filonun ana komuta merkezidir. 4 doğrusal petekten oluşan en uzun ve en zırhlı amiral gemisidir; batırılması durumunda stratejik üstünlük kaybedilir.",
+            description = "Filonun ana komuta merkezidir. 4 doğrusal petekten oluşan en uzun ve en zırhlı amiral gemisidir.\n• 💥 Aktif Yetenek — Ağır Batarya Bombardımanı (Line Barrage - 3 CP): Düşman haritası sol üst köşesindeki özel rozetten tetiklenir (Varsayılan maç başı 1 hak, oda ayarlarından 0-3 arası belirlenebilir). Tek petek yerine, altıgen doğrultuda arka arkaya 5 peteği aynı anda bombalar (Yön butonuyla Yatay, Çapraz Sağ veya Çapraz Sol seçilebilir). Resiflerin arkasına saklanmış gemileri havadan süpürmek için idealdir. Amiral Zırhlısı batarsa bu yetenek kaybedilir.",
             iconTint = BoardColors.NavyDark,
             imageRes = R.drawable.ship_flagship
         )
@@ -509,7 +511,7 @@ private fun FleetAndAbilitiesSection() {
 
         InfoCard(
             title = "📡 Taktik İHA Keşfi (3 CP) — Geniş Alan Taraması",
-            description = "Seçilen merkez ve komşu 6 petek (toplam 7 peteklik sektör) anında taranır.\n• Sinyal Tespiti: Sektördeki düşman gemi parçası sayısı bildirilir (tam koordinatları gizli kalır).\n• Radyoaktif Sis Engeli: Sis altındaki gemiler tespit edilemez (boş görünür).\n• Kalkan Teması: Kalkan merkezine İHA gelirse kalkanın 1 canı kalır; komşu peteğe İHA gelirse kalkan kubbesi anında çöker.",
+            description = "Seçilen merkez ve komşu 6 petek (toplam 7 peteklik sektör) anında taranır.\n• Sinyal Tespiti: Sektördeki düşman gemi parçası sayısı bildirilir (tam koordinatları gizli kalır).\n• İHA Taşıyıcı Şartı: İHA Taşıyıcınız batmışsa radar kilitlenir ve kullanılamaz.\n• Hayalet Korvet Gizliliği: Düşman Korveti %50 olasılıkla radardan tamamen gizlenir.\n• Radyoaktif Sis Engeli: Sis altındaki gemiler tespit edilemez (boş görünür).\n• Kalkan Teması: Kalkan merkezine İHA gelirse kalkanın 1 canı kalır; komşu peteğe İHA gelirse kalkan kubbesi anında çöker.",
             icon = Icons.Default.Radar,
             iconTint = BoardColors.PurplePrimary
         )
@@ -519,6 +521,13 @@ private fun FleetAndAbilitiesSection() {
             description = "Seçilen dost sektör etrafına 7 peteklik heksagonal koruma kubbesi örter.\n• Darbe Soğurması: Sektör içindeki herhangi bir peteğe gelen ilk düşman top atışını hasarsız sönümler.\n• Kubbenin Çökmesi: Mermiyi sönümledikten sonra kalkan kubbesi tamamen çöker ve haritada flu mavi sönümleme izi kalır.\n• Gizlilik: Düşman kalkan açtığında muharebe günlüğünde koordinatı gizli tutulur.",
             icon = Icons.Default.Shield,
             iconTint = BoardColors.NavyAccent
+        )
+
+        InfoCard(
+            title = "🎮 Altıgen Radyal Menü (Radial HUD Wheel) — Hızlı Dokunmatik",
+            description = "Düşman haritasındaki herhangi bir peteğe hafifçe basılı tuttuğunuzda (~260ms), o peteğin etrafında fütüristik neon 3 dilimli kontrol HUD tekerleği açılır:\n• 🔴 Üst Dilim: Ateş Et (1 CP)\n• 🟣 Sol Dilim: İHA Taraması (3 CP - Taşıyıcı canlıyken)\n• 🔵 Sağ Dilim: Aegis Kalkanı (2 CP)\nParmağınızı ilgili yöne kaydırıp bıraktığınız anda (Flick & Release) komut anında ateşlenir. Mobil dokunmatik ekranlar için süper akıcı bir savaş gemisi radar konsolu hissi verir.",
+            icon = Icons.Default.Radar,
+            iconTint = BoardColors.PurplePrimary
         )
     }
 }
@@ -1261,5 +1270,417 @@ private fun SectionHeader(title: String, icon: ImageVector) {
             fontFamily = FontFamily.Monospace,
             letterSpacing = 1.sp
         )
+    }
+}
+
+/**
+ * Tersanede konuşlandırılan gemi ve çevre nesneleri (Radyoaktif Sis vb.) için zengin taktiksel bilgi modeli.
+ */
+data class DeployableObjectInfo(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val badge: String,
+    val sizeText: String,
+    val roleText: String,
+    val abilityText: String,
+    val description: String,
+    val tacticalImpact: String,
+    val placementTip: String,
+    val accentColor: Color,
+    val imageRes: Int? = null,
+    val icon: ImageVector? = null,
+    val cellCount: Int = 2,
+    val isTriangle: Boolean = false
+)
+
+fun getDeployableObjectInfo(nameOrId: String): DeployableObjectInfo {
+    val lower = nameOrId.lowercase()
+    return when {
+        lower.contains("delta") -> DeployableObjectInfo(
+            id = "delta",
+            title = "Delta Taarruz Kruvazörü",
+            subtitle = "3 Peteklik Üçgen Gövdeli Ağır Kruvazör",
+            badge = "AKTİF: EMP İYON ŞOKU (0 CP)",
+            sizeText = "3 Petek (Eşkenar Üçgen)",
+            roleText = "Elektronik Harp & Kalkan Kırıcı",
+            abilityText = "Kalkan Çökertme & 1 CP Silme",
+            description = "1 önde (burun) ve 2 arkada (sağ/sol kanat) eşkenar üçgen gövdeye sahiptir. Doğrusal olmayan delta geometrisiyle geleneksel hat taramalarında vurulması ve tespit edilmesi zordur.",
+            tacticalImpact = "• Aktif Yetenek — İyon Şoku / EMP (0 CP): Düşman haritasında seçilen 7 peteklik sektöre güçlü EMP şoku yollar.\n• Kalkan İmhası: Hedefteki düşman Aegis Savunma Kalkanı'nı anında çökerterek yok eder.\n• CP Sabotajı: Sektörde düşman gemisi varsa rakibin bir sonraki turdaki Komut Puanı 3 yerine 2'ye düşer!\n• Kritik Şart: Delta Kruvazörü batarsa bu EMP yeteneği devre dışı kalır.",
+            placementTip = "Delta'nın üçgen gövdesi 6 farklı yöne dönebilir (Kuzey, Güney, KD, KB, GD, GB). Harita ortasındaki resiflerin girintilerine yerleştirerek düşmanın doğrusal (çizgisel) tahminlerini boşa çıkarın. EMP yeteneğini korumak için erken safhada batırılmayacak korunaklı sulara konuşlandırın.",
+            accentColor = Color(0xFF06B6D4),
+            imageRes = R.drawable.ship_delta,
+            cellCount = 3,
+            isTriangle = true
+        )
+        lower.contains("carrier") || lower.contains("iha") || lower.contains("i̇ha") -> DeployableObjectInfo(
+            id = "carrier",
+            title = "İHA Gemisi (Taşıyıcı)",
+            subtitle = "3 Peteklik Filo İstihbarat & Radar Üssü",
+            badge = "KRİTİK HEDEF: İHA RADAR MERKEZİ",
+            sizeText = "3 Petek (Doğrusal)",
+            roleText = "Hava İstihbarat & Radar Keşfi",
+            abilityText = "7 Peteklik Sektörel İHA Keşfi (3 CP)",
+            description = "Filonun tüm hava keşif ve istihbarat sistemlerini üzerinde taşıyan 3 peteklik yüksek stratejik öneme sahip filo üssüdür.",
+            tacticalImpact = "• Taktik Radar İstasyonu: 7 peteklik geniş İHA tarama yeteneği doğrudan bu gemiye bağlıdır.\n• KRİTİK RİSK (High-Value Target): Eğer İHA Taşıyıcınız batırılırsa radar istasyonu imha edilir ve İHA keşif kabiliyeti maç boyunca tamamen kilitlenir (kullanılamaz)!\n• Stratejik Savunma: Filonun gözü kulağı olduğu için düşmanın birincil hedefidir.",
+            placementTip = "Filonun en çok korunması gereken gemisidir! Üzerine mutlaka 'Radyoaktif Sis' yerleştirerek İHA'lara karşı kamufle edin veya yanına Aegis Kalkanı açabileceğiniz güvenli bir arka hat bölgesine yerleştirin.",
+            accentColor = BoardColors.NavyAccent,
+            imageRes = R.drawable.ship_carrier,
+            cellCount = 3
+        )
+        lower.contains("flagship") || lower.contains("amiral") -> DeployableObjectInfo(
+            id = "flagship",
+            title = "Amiral Gemisi",
+            subtitle = "4 Peteklik Donanma Sancak Zırhlısı",
+            badge = "AKTİF: AĞIR BOMBARDIMAN (LINE BARRAGE)",
+            sizeText = "4 Petek (Doğrusal)",
+            roleText = "Ağır Bombardıman & Donanma Omurgası",
+            abilityText = "5 Peteklik Ardışık Hat Süpürme (3 CP)",
+            description = "Filodaki en uzun ve en dayanıklı ana komuta zırhlısıdır. Yüksek kalibreli toplarıyla tüm savaş alanına hükmeder.",
+            tacticalImpact = "• Aktif Yetenek — Ağır Bombardıman (Line Barrage - 3 CP): Altıgen eksen boyunca ardışık 5 peteği aynı anda havadan bombalar.\n• Resifleri Aşar: Havadan kavisli atış yapıldığı için mercan resifleri mermileri durduramaz!\n• Kritik Şart: Amiral Gemisi batırılırsa 5'li bombardıman yeteneği kaybedilir.",
+            placementTip = "4 peteklik uzunluğu nedeniyle düşmanın rastgele isabet bulma olasılığı yüksektir. Haritanın kenar hatlarına veya köşegenlerine yerleştirin. İki ucu resif arkasına denk gelecek şekilde konuşlandırmak düşmanın hat takibini zorlaştırır.",
+            accentColor = BoardColors.CrimsonRed,
+            imageRes = R.drawable.ship_flagship,
+            cellCount = 4
+        )
+        lower.contains("radioactive") || lower.contains("radyoaktif") -> DeployableObjectInfo(
+            id = "radioactive",
+            title = "Radyoaktif Sis Bölgesi",
+            subtitle = "2 Peteklik Elektronik & Radar Kamuflaj Perdesi",
+            badge = "PASİF: İHA SİNYAL ENGELLEYİCİ (JAMMER)",
+            sizeText = "2 Petek (Yönlendirilebilir)",
+            roleText = "Taktiksel Alan Kamuflajı",
+            abilityText = "Mutlak İHA Radar Görünmezliği",
+            description = "Oyun başında konuşlandırılan 2 peteklik yüksek yoğunluklu kimyasal/radyoaktif yeşil sis perdesidir. Boş sulara veya gemilerinizin tam üzerine yerleştirilebilir.",
+            tacticalImpact = "• İHA Sinyal Engeli: Bu sisin altındaki gemiler düşmanın 7 peteklik İHA keşif taramasında ASLA görünmez (radar o petekleri tamamen boş raporlar).\n• Top Atışı Farkı: Sis bölgesi doğrudan top atışlarını durdurmaz; sadece radar keşfini engeller.\n• Sınırlar: Mercan resiflerine veya harita sınırları dışına taşamaz.",
+            placementTip = "En kritik gemilerinizin (özellikle batarsa İHA'nızı kilitleyen İHA Taşıyıcısının veya Amiral Geminizin) üzerine konuşlandırın! Düşman o sektörü tarasa bile sinyal '0' çıkacağı için orayı boş zannedecek ve vuruş yapmayacaktır.",
+            accentColor = Color(0xFF16A34A),
+            icon = Icons.Default.Sensors,
+            imageRes = R.drawable.hazard_radioactive,
+            cellCount = 2
+        )
+        else -> DeployableObjectInfo(
+            id = "corvette",
+            title = "Hayalet Korvet",
+            subtitle = "2 Peteklik Çevik Stealth Hücumbot",
+            badge = "PASİF: HAYALET GÖVDE (%50 STEALTH)",
+            sizeText = "2 Petek (Doğrusal)",
+            roleText = "Gizli Keşif & Çevik Hücumbot",
+            abilityText = "%50 İHA Radar Sinyali Soğurma",
+            description = "2 peteklik yüksek manevra kabiliyetine sahip çevik hücumbottur. Harita kenarlarına ve resif aralarına gizlenmesi en kolay stealth gemidir.",
+            tacticalImpact = "• Pasif Yetenek — Hayalet Gövde (Stealth Hull): Düşmanın 7 peteklik İHA radar taraması Korvet'in üzerinden geçse dahi radar %50 olasılıkla sinyali yakalayamaz (tamamen gizlenir).\n• Gerçek İhtimal: Bu %50 gizlilik şansı tüm oyun modlarında (Yapay Zeka ve Çok Oyunculu) aktiftir.\n• Dayanıklılık: 2 isabette batar; küçük gövdesiyle düşmanın atışlarını boşa harcatmak için idealdir.",
+            placementTip = "Resiflerin kuytularına veya haritanın en dış çeperlerine yerleştirin. İHA taramasını %50 şansla atlattığı için düşmanı yanıltmak adına tek başına bağımsız bir bölgeye konuşlandırmak harika bir taktiktir.",
+            accentColor = BoardColors.PurplePrimary,
+            imageRes = R.drawable.ship_corvette,
+            cellCount = 2
+        )
+    }
+}
+
+fun getDeployableObjectAccent(nameOrId: String): Color {
+    val lower = nameOrId.lowercase()
+    return when {
+        lower.contains("delta") -> Color(0xFF06B6D4)
+        lower.contains("carrier") || lower.contains("iha") || lower.contains("i̇ha") -> BoardColors.NavyAccent
+        lower.contains("flagship") || lower.contains("amiral") -> BoardColors.CrimsonRed
+        lower.contains("radioactive") || lower.contains("radyoaktif") -> Color(0xFF16A34A)
+        else -> BoardColors.PurplePrimary
+    }
+}
+
+/**
+ * Tersane ve konuşlandırma ekranındaki gemi/nesne kartlarında yer alan profesyonel estetik bilgi butonu.
+ */
+@Composable
+fun DeployInfoIconButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    accentColor: Color = BoardColors.NavyAccent,
+    contentDescription: String = "Nesne Bilgisi"
+) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = accentColor.copy(alpha = 0.12f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, accentColor.copy(alpha = 0.40f)),
+        modifier = modifier.size(24.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = contentDescription,
+                tint = accentColor,
+                modifier = Modifier.size(13.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Gemi ve Taktik Nesneler için tüm ekran türlerine uyumlu, estetik ve profesyonel detay pop-up penceresi.
+ */
+@Composable
+fun DeployableObjectInfoDialog(
+    info: DeployableObjectInfo,
+    onDismissRequest: () -> Unit
+) {
+    val configuration = LocalConfiguration.current
+    val screenWidthDp = configuration.screenWidthDp
+    val screenHeightDp = configuration.screenHeightDp
+
+    val dialogWidth = when {
+        screenWidthDp >= 840 -> 520.dp
+        screenWidthDp >= 600 -> 480.dp
+        else -> (screenWidthDp * 0.92f).dp
+    }
+    val maxContentHeight = (screenHeightDp * 0.85f).dp
+
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
+        )
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = BoardColors.PureWhite,
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, info.accentColor.copy(alpha = 0.65f)),
+            shadowElevation = 14.dp,
+            modifier = Modifier
+                .width(dialogWidth)
+                .heightIn(max = maxContentHeight)
+                .padding(horizontal = 6.dp, vertical = 10.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                // 1. ÜST BAŞLIK SATIRI (Thumbnail + Başlık/Alt Başlık + Kapat Butonu)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        // Görsel Önizleme Kutusu
+                        Box(
+                            modifier = Modifier
+                                .size(width = 54.dp, height = 34.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(info.accentColor.copy(alpha = 0.12f))
+                                .border(1.2.dp, info.accentColor.copy(alpha = 0.45f), RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (info.imageRes != null) {
+                                Image(
+                                    painter = painterResource(info.imageRes),
+                                    contentDescription = info.title,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(3.dp),
+                                    contentScale = ContentScale.Fit
+                                )
+                            } else if (info.icon != null) {
+                                Icon(
+                                    imageVector = info.icon,
+                                    contentDescription = info.title,
+                                    tint = info.accentColor,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+
+                        Column {
+                            Text(
+                                text = info.title,
+                                color = BoardColors.NavyDark,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = info.subtitle,
+                                color = BoardColors.TextSecondary,
+                                fontSize = 9.5.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onDismissRequest,
+                        modifier = Modifier
+                            .size(30.dp)
+                            .background(BoardColors.SurfaceSubtle, CircleShape)
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Kapat",
+                            tint = BoardColors.TextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // 2. TAKTİKSEL ROZET VE ÖZELLİK ETİKETLERİ (Spec Chips)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        color = info.accentColor.copy(alpha = 0.10f),
+                        shape = RoundedCornerShape(6.dp),
+                        border = androidx.compose.foundation.BorderStroke(0.8.dp, info.accentColor.copy(alpha = 0.35f))
+                    ) {
+                        Text(
+                            text = "● ${info.badge}",
+                            color = info.accentColor,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                        )
+                    }
+
+                    Surface(
+                        color = BoardColors.SurfaceSubtle,
+                        shape = RoundedCornerShape(6.dp),
+                        border = androidx.compose.foundation.BorderStroke(0.8.dp, BoardColors.BorderSubtle)
+                    ) {
+                        Text(
+                            text = "📏 ${info.sizeText}",
+                            color = BoardColors.NavyDark,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // 3. KAYDIRILABİLİR İÇERİK KARTLARI (Tüm ekran boyutlarında sorunsuz kayar ve okunur)
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // A. Genel Tanım ve Gövde Mekaniği
+                    Surface(
+                        color = BoardColors.SurfaceSubtle,
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BoardColors.BorderSubtle),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text("ℹ️", fontSize = 11.sp)
+                                Text(
+                                    text = "GENEL TANIM VE GÖVDE MEKANİĞİ",
+                                    color = BoardColors.NavyDark,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                            Text(
+                                text = info.description,
+                                color = BoardColors.TextPrimary,
+                                fontSize = 10.5.sp,
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+
+                    // B. Taktiksel Yetenek ve Muharebe Etkisi
+                    Surface(
+                        color = info.accentColor.copy(alpha = 0.05f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, info.accentColor.copy(alpha = 0.25f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text("⚔️", fontSize = 11.sp)
+                                Text(
+                                    text = "TAKTİKSEL YETENEK & MUHAREBE ETKİSİ",
+                                    color = info.accentColor,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                            Text(
+                                text = info.tacticalImpact,
+                                color = BoardColors.NavyDark,
+                                fontSize = 10.5.sp,
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+
+                    // C. Konuşlandırma ve Tersane Stratejisi İpucu
+                    Surface(
+                        color = Color(0xFFFEF3C7).copy(alpha = 0.60f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.35f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text("💡", fontSize = 11.sp)
+                                Text(
+                                    text = "KONUŞLANDIRMA & GİZLENME İPUCU",
+                                    color = Color(0xFFB45309),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                            Text(
+                                text = info.placementTip,
+                                color = Color(0xFF92400E),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                lineHeight = 14.5.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 4. ALT ONAY / KAPATMA BUTONU
+                Button(
+                    onClick = onDismissRequest,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(40.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = info.accentColor)
+                ) {
+                    Text(
+                        text = "ANLADIM",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        }
     }
 }
