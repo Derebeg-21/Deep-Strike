@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="deep_ocean">#050B14</color>
+    <color name="hud_background">#0B1526</color>
+    <color name="cyan_accent">#00E5FF</color>
+    <color name="sonar_green">#00E676</color>
+    <color name="danger_red">#FF1744</color>
+</resources>
+
