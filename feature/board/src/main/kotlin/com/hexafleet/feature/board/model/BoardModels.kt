@@ -108,28 +108,28 @@ data class RadioactiveZone(
  */
 data class GameCustomRules(
     val maxShieldDomes: Int = 1,          // 0 - 5 (Standart: 1, Devasa: 2)
-    val radioactiveZonesCount: Int = 1,   // 0 - 5 (R=5: 1, R=6: 2, R=7: 3)
-    val coralReefCount: Int = 4,          // 0 - 10 (R=5: 4, R=6: 5, R=7: 6)
-    val magneticStormCount: Int = 4,      // 0 - 10 (R=5: 4, R=6: 6, R=7: 8)
+    val radioactiveZonesCount: Int = 1,   // 0 - 5 (R=5: 1, R=7: 2, R=8: 3)
+    val coralReefCount: Int = 4,          // 0 - 10 (R=5: 4, R=7: 5, R=8: 6)
+    val magneticStormCount: Int = 4,      // 0 - 10 (R=5: 4, R=7: 6, R=8: 8)
     val maxEmpStrikes: Int = 1,           // 0 - 3 (Delta Kruvazörü EMP İyon Şoku, Varsayılan: 1)
     val maxLineBarrages: Int = 1          // 0 - 3 (Amiral Zırhlısı Ağır Bombardımanı, Varsayılan: 1)
 ) {
     companion object {
         fun defaultForRadius(radius: Int): GameCustomRules {
-            val shields = if (radius >= 7) 2 else 1
+            val shields = if (radius >= 8) 2 else 1
             val radioactive = when {
                 radius <= 5 -> 1
-                radius == 6 -> 2
+                radius <= 7 -> 2
                 else -> 3
             }
             val reefs = when {
                 radius <= 5 -> 4
-                radius == 6 -> 5
+                radius <= 7 -> 5
                 else -> 6
             }
             val storms = when {
                 radius <= 5 -> 4
-                radius == 6 -> 6
+                radius <= 7 -> 6
                 else -> 8
             }
             return GameCustomRules(
@@ -277,7 +277,7 @@ data class DualBattleUiState(
     val turnNumber: Int = 1,
     val isPlayerTurn: Boolean = true,
     val winner: String? = null, // "PLAYER" veya "ENEMY"
-    val lastBannerMessage: String = "Filonuzu haritaya yerleştirin ve savaşı başlatın!",
+    val lastBannerMessage: String = "Filoyu yerleştirip savaşı başlatın",
     val structuredLogs: List<CombatLogEntry> = emptyList(),
     val battleLog: List<String> = listOf("Filo konuşlandırma aşaması. Gemilerinizi yerleştirin.")
 ) {

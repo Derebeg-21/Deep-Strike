@@ -82,6 +82,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -106,6 +107,7 @@ import com.hexafleet.feature.board.ui.dialogs.HexaFleetExitDialog
 import com.hexafleet.feature.board.ui.dialogs.HexaFleetInfoDialog
 import com.hexafleet.feature.board.ui.dialogs.HexaFleetSettingsDialog
 import com.hexafleet.feature.board.ui.dialogs.HexaFleetTopActions
+import com.hexafleet.feature.board.ui.dialogs.GlossyInfoButton
 import kotlinx.coroutines.delay
 
 /**
@@ -253,56 +255,62 @@ fun LobbyScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp, bottom = 12.dp),
+                    .padding(top = if (isTabletLayout) 8.dp else 2.dp, bottom = if (isTabletLayout) 12.dp else 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Box(
                         modifier = Modifier
-                            .size(38.dp)
-                            .background(BoardColors.NavyDark, RoundedCornerShape(10.dp))
-                            .border(1.5.dp, BoardColors.PurplePrimary, RoundedCornerShape(10.dp)),
+                            .size(if (isTabletLayout) 38.dp else 32.dp)
+                            .background(BoardColors.NavyDark, RoundedCornerShape(8.dp))
+                            .border(1.5.dp, BoardColors.PurplePrimary, RoundedCornerShape(8.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "DS",
                             color = Color.White,
-                            fontSize = 15.sp,
+                            fontSize = if (isTabletLayout) 15.sp else 13.sp,
                             fontWeight = FontWeight.Black,
                             fontFamily = FontFamily.Monospace
                         )
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(if (isTabletLayout) 10.dp else 6.dp))
                     Column {
                         Text(
                             text = "DEEP STRIKE",
                             color = BoardColors.NavyDark,
-                            fontSize = 20.sp,
+                            fontSize = if (isTabletLayout) 20.sp else 16.sp,
                             fontWeight = FontWeight.ExtraBold,
                             fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.5.sp
+                            letterSpacing = 1.2.sp
                         )
                         Text(
                             text = "TACTICAL NAVAL WARFARE",
                             color = BoardColors.PurplePrimary,
-                            fontSize = 10.sp,
+                            fontSize = if (isTabletLayout) 10.sp else 8.5.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.2.sp
+                            letterSpacing = 0.8.sp
                         )
                     }
                 }
 
-                // Sağ Üst Info, Ayarlar, Kapatma Butonları
+                Spacer(modifier = Modifier.width(6.dp))
+
+                // Sağ Üst Info (3D Glossy), Ayarlar, Kapatma Butonları (Kompakt & Estetik)
                 HexaFleetTopActions(
                     onOpenInfo = { showInfoDialog = true },
                     onOpenSettings = { showSettingsDialog = true },
-                    onOpenExit = { showExitDialog = true }
+                    onOpenExit = { showExitDialog = true },
+                    isTablet = isTabletLayout
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(if (isTabletLayout) 10.dp else 4.dp))
 
             // ==================== ANA OYUN MODU SEÇİCİ ====================
             // ==================== ANA OYUN MODU SEÇİCİ (User Requirement 4: Neon Tasarım) ====================
@@ -314,10 +322,15 @@ fun LobbyScreen(
                     shadowElevation = 3.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    val mainTabFontSize = if (isTabletLayout) 12.sp else 10.sp
+                    val mainTabPadding = if (isTabletLayout) 12.dp else 4.dp
+                    val mainIconSize = if (isTabletLayout) 20.dp else 18.dp
+                    val mainSpacing = if (isTabletLayout) 6.dp else 4.dp
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(4.dp),
+                            .padding(horizontal = 4.dp, vertical = if (isTabletLayout) 4.dp else 2.5.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         // TAB 0: ÇEVRİMİÇİ SAVAŞ (Neon Mor Vurgu)
@@ -326,7 +339,7 @@ fun LobbyScreen(
                             onClick = { mainGameModeTab = 0 },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(44.dp),
+                                .height(if (isTabletLayout) 44.dp else 38.dp),
                             shape = RoundedCornerShape(12.dp),
                             color = if (isOnlineSelected) Color(0xFFF5F3FF) else Color.Transparent,
                             border = if (isOnlineSelected) {
@@ -337,33 +350,35 @@ fun LobbyScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(horizontal = 12.dp),
+                                    .padding(horizontal = mainTabPadding),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
                             ) {
                                 if (isOnlineSelected) {
                                     Box(
                                         modifier = Modifier
-                                            .size(7.dp)
+                                            .size(5.dp)
                                             .clip(CircleShape)
                                             .background(Color(0xFF8B5CF6))
                                     )
-                                    Spacer(modifier = Modifier.width(7.dp))
+                                    Spacer(modifier = Modifier.width(mainSpacing))
                                 }
                                 Image(
                                     painter = painterResource(com.hexafleet.feature.lobby.R.drawable.ic_gamepad_multiplayer),
                                     contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
+                                    modifier = Modifier.size(mainIconSize),
                                     contentScale = ContentScale.Fit,
                                     alpha = if (isOnlineSelected) 1f else 0.65f
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(mainSpacing))
                                 Text(
                                     text = "ÇEVRİMİÇİ SAVAŞ",
                                     fontWeight = if (isOnlineSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
                                     fontFamily = FontFamily.Monospace,
-                                    fontSize = 12.sp,
-                                    letterSpacing = 0.4.sp,
+                                    fontSize = mainTabFontSize,
+                                    letterSpacing = if (isTabletLayout) 0.3.sp else (-0.2).sp,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     color = if (isOnlineSelected) Color(0xFF7C3AED) else BoardColors.TextSecondary
                                 )
                             }
@@ -375,7 +390,7 @@ fun LobbyScreen(
                             onClick = { mainGameModeTab = 1 },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(44.dp),
+                                .height(if (isTabletLayout) 44.dp else 38.dp),
                             shape = RoundedCornerShape(12.dp),
                             color = if (isAiSelected) Color(0xFFFFF1F2) else Color.Transparent,
                             border = if (isAiSelected) {
@@ -386,32 +401,34 @@ fun LobbyScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(horizontal = 12.dp),
+                                    .padding(horizontal = mainTabPadding),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
                             ) {
                                 if (isAiSelected) {
                                     Box(
                                         modifier = Modifier
-                                            .size(7.dp)
+                                            .size(5.dp)
                                             .clip(CircleShape)
                                             .background(Color(0xFFF43F5E))
                                     )
-                                    Spacer(modifier = Modifier.width(7.dp))
+                                    Spacer(modifier = Modifier.width(mainSpacing))
                                 }
                                 Image(
                                     painter = painterResource(com.hexafleet.feature.lobby.R.drawable.ic_ai_robot_avatar),
                                     contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
+                                    modifier = Modifier.size(mainIconSize),
                                     contentScale = ContentScale.Fit
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(mainSpacing))
                                 Text(
                                     text = "YAPAY ZEKAYA KARŞI",
                                     fontWeight = if (isAiSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
                                     fontFamily = FontFamily.Monospace,
-                                    fontSize = 12.sp,
-                                    letterSpacing = 0.4.sp,
+                                    fontSize = mainTabFontSize,
+                                    letterSpacing = if (isTabletLayout) 0.3.sp else (-0.2).sp,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     color = if (isAiSelected) Color(0xFFE11D48) else BoardColors.TextSecondary
                                 )
                             }
@@ -419,7 +436,7 @@ fun LobbyScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(if (isTabletLayout) 18.dp else 6.dp))
             }
 
             // ==================== MOD 1: ÇEVRİMİÇİ SAVAŞ (ONLINE) ====================
@@ -449,7 +466,12 @@ fun LobbyScreen(
                         copyFeedback = copyFeedback
                     )
                 } else {
-                    // ODA KUR, ODAYA KATIL VEYA LOBİ ODALARI (User Requirements 4 & 5)
+                    // ODA KUR, ODAYA KATIL VEYA LOBİ ODALARI (User Requirements: Tek satır, eşit dinamik yükseklik ve taşmasız hizalama)
+                    val subTabFontSize = if (isTabletLayout) 11.5.sp else 8.5.sp
+                    val hostTitle = if (isTabletLayout) "ODA KUR (HOST)" else "ODA KUR"
+                    val joinTitle = if (isTabletLayout) "ODAYA KATIL (JOIN)" else "ODAYA KATIL"
+                    val lobbyTitle = if (isTabletLayout) "LOBİ ODALARI (LOBBY)" else "LOBİ ODALARI"
+
                     TabRow(
                         selectedTabIndex = selectedOnlineSubTab,
                         containerColor = BoardColors.SurfaceSubtle,
@@ -467,12 +489,15 @@ fun LobbyScreen(
                         Tab(
                             selected = selectedOnlineSubTab == 0,
                             onClick = { selectedOnlineSubTab = 0 },
+                            modifier = Modifier.height(if (isTabletLayout) 42.dp else 34.dp),
                             text = {
                                 Text(
-                                    "ODA KUR (HOST)",
+                                    text = hostTitle,
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = FontFamily.Monospace,
-                                    fontSize = 11.sp,
+                                    fontSize = subTabFontSize,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     color = if (selectedOnlineSubTab == 0) BoardColors.NavyDark else BoardColors.TextSecondary
                                 )
                             }
@@ -480,12 +505,15 @@ fun LobbyScreen(
                         Tab(
                             selected = selectedOnlineSubTab == 1,
                             onClick = { selectedOnlineSubTab = 1 },
+                            modifier = Modifier.height(if (isTabletLayout) 42.dp else 34.dp),
                             text = {
                                 Text(
-                                    "ODAYA KATIL (JOIN)",
+                                    text = joinTitle,
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = FontFamily.Monospace,
-                                    fontSize = 11.sp,
+                                    fontSize = subTabFontSize,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     color = if (selectedOnlineSubTab == 1) BoardColors.NavyDark else BoardColors.TextSecondary
                                 )
                             }
@@ -493,17 +521,23 @@ fun LobbyScreen(
                         Tab(
                             selected = selectedOnlineSubTab == 2,
                             onClick = { selectedOnlineSubTab = 2 },
+                            modifier = Modifier.height(if (isTabletLayout) 42.dp else 34.dp),
                             text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
                                     Text(
-                                        "LOBİ ODALARI",
+                                        text = lobbyTitle,
                                         fontWeight = FontWeight.Bold,
                                         fontFamily = FontFamily.Monospace,
-                                        fontSize = 11.sp,
+                                        fontSize = subTabFontSize,
+                                        maxLines = 1,
+                                        softWrap = false,
                                         color = if (selectedOnlineSubTab == 2) BoardColors.NavyDark else BoardColors.TextSecondary
                                     )
                                     if (publicRooms.isNotEmpty()) {
-                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
                                         Surface(
                                             color = BoardColors.PurplePrimary,
                                             shape = CircleShape
@@ -511,10 +545,10 @@ fun LobbyScreen(
                                             Text(
                                                 text = "${publicRooms.size}",
                                                 color = Color.White,
-                                                fontSize = 9.sp,
+                                                fontSize = 8.5.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 fontFamily = FontFamily.Monospace,
-                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                                             )
                                         }
                                     }
@@ -523,7 +557,7 @@ fun LobbyScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(if (isTabletLayout) 16.dp else 6.dp))
 
                     when (selectedOnlineSubTab) {
                         0 -> {
@@ -1082,77 +1116,16 @@ private fun HostRoomConfigCard(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         // KART 1: TUR SÜRESİ VE HARİTA BÜYÜKLÜĞÜ (User Requirement 3 - Estetik Alan & Flu Mavi Animasyonlu Sınır)
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = BoardColors.SurfaceSubtle,
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.2.dp, cyanBorder)
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text(
-                                    text = "TEMEL HAREKAT PARAMETRELERİ",
-                                    color = BoardColors.NavyDark,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                Text("TUR SÜRESİ", color = BoardColors.NavyDark, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    listOf(15 to "Blitz (15 sn)", 45 to "Standart (45 sn)", 60 to "Taktik (60 sn)").forEach { (sec, label) ->
-                                        val selected = turnDuration == sec
-                                        Surface(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clickable { onDurationChanged(sec) },
-                                            color = if (selected) BoardColors.PurpleLight else BoardColors.PureWhite,
-                                            shape = RoundedCornerShape(8.dp),
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) BoardColors.PurplePrimary else BoardColors.BorderSubtle)
-                                        ) {
-                                            Text(
-                                                text = label,
-                                                color = if (selected) BoardColors.PurplePrimary else BoardColors.TextPrimary,
-                                                fontSize = 9.sp,
-                                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                                fontFamily = FontFamily.Monospace,
-                                                modifier = Modifier.padding(vertical = 6.dp),
-                                                textAlign = TextAlign.Center
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                Text("HARİTA BÜYÜKLÜĞÜ", color = BoardColors.NavyDark, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    listOf(5 to "Standart (91 Bölge)", 6 to "Geniş (127 Bölge)", 7 to "Devasa (169 Bölge)").forEach { (r, label) ->
-                                        val selected = mapRadius == r
-                                        Surface(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clickable { onRadiusChanged(r) },
-                                            color = if (selected) BoardColors.PurpleLight else BoardColors.PureWhite,
-                                            shape = RoundedCornerShape(8.dp),
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) BoardColors.PurplePrimary else BoardColors.BorderSubtle)
-                                        ) {
-                                            Text(
-                                                text = label,
-                                                color = if (selected) BoardColors.PurplePrimary else BoardColors.TextPrimary,
-                                                fontSize = 8.5.sp,
-                                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                                fontFamily = FontFamily.Monospace,
-                                                modifier = Modifier.padding(vertical = 7.dp, horizontal = 2.dp),
-                                                textAlign = TextAlign.Center
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        TacticalCoreParametersCard(
+                            turnDuration = turnDuration,
+                            onDurationChanged = onDurationChanged,
+                            mapRadius = mapRadius,
+                            onRadiusChanged = onRadiusChanged,
+                            borderColor = cyanBorder,
+                            accentColor = BoardColors.PurplePrimary,
+                            isTablet = true,
+                            isCompact = false
+                        )
 
                         // KART 2: LOBİ GÜVENLİK VE ÇEVRE DÜZENİ (User Requirement 4 - Estetik Alan & Flu Yeşil Animasyonlu Sınır)
                         Surface(
@@ -1359,155 +1332,99 @@ private fun HostRoomConfigCard(
             }
         } else {
             // ==================== MOBİL DÜZENİ: TEK EKRAN (KOMPAKT, SIFIR KAYDIRMA) ====================
-            Column(modifier = Modifier.padding(12.dp)) {
-                // Oda Kodu Satırı
+            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
+                // Oda Kodu Satırı: Yatay tek satırda kompakt ve şık
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text("ODA KODU", color = BoardColors.TextSecondary, fontSize = 8.5.sp, fontFamily = FontFamily.Monospace)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "ODA KODU:",
+                            color = BoardColors.TextSecondary,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
                         Text(
                             text = roomCode,
                             color = BoardColors.NavyDark,
-                            fontSize = 20.sp,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.ExtraBold,
                             fontFamily = FontFamily.Monospace,
-                            letterSpacing = 2.sp
+                            letterSpacing = 1.5.sp
                         )
                     }
-                    IconButton(
-                        onClick = onCopyCode,
-                        modifier = Modifier.size(32.dp).background(BoardColors.PurpleLight, CircleShape)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = "Kopyala", tint = BoardColors.PurplePrimary, modifier = Modifier.size(16.dp))
-                    }
-                }
-
-                AnimatedVisibility(visible = copyFeedback) {
-                    Text("✓ Kod kopyalandı", color = BoardColors.PurplePrimary, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // KART 1: TUR SÜRESİ VE HARİTA BÜYÜKLÜĞÜ (User Requirement 3 - Estetik Alan & Flu Mavi Animasyonlu Sınır)
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = BoardColors.SurfaceSubtle,
-                    shape = RoundedCornerShape(10.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.2.dp, cyanBorder)
-                ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        Text(
-                            text = "TEMEL HAREKAT PARAMETRELERİ",
-                            color = BoardColors.NavyDark,
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        // Tur Süresi
-                        Text("TUR SÜRESİ", color = BoardColors.NavyDark, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf(15 to "Blitz (15s)", 45 to "Standart (45s)", 60 to "Taktik (60s)").forEach { (sec, label) ->
-                                val selected = turnDuration == sec
-                                Surface(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { onDurationChanged(sec) },
-                                    color = if (selected) BoardColors.PurpleLight else BoardColors.SurfaceSubtle,
-                                    shape = RoundedCornerShape(7.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) BoardColors.PurplePrimary else BoardColors.BorderSubtle)
-                                ) {
-                                    Text(
-                                        text = label,
-                                        color = if (selected) BoardColors.PurplePrimary else BoardColors.TextPrimary,
-                                        fontSize = 9.sp,
-                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                        fontFamily = FontFamily.Monospace,
-                                        modifier = Modifier.padding(vertical = 5.dp),
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
+                        AnimatedVisibility(visible = copyFeedback) {
+                            Text("✓ Kopyalandı", color = BoardColors.PurplePrimary, fontSize = 8.sp, fontFamily = FontFamily.Monospace)
                         }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        // Harita Boyutu
-                        Text("HARİTA BÜYÜKLÜĞÜ", color = BoardColors.NavyDark, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf(5 to "Standart (91)", 6 to "Geniş (127)", 7 to "Devasa (169)").forEach { (r, label) ->
-                                val selected = mapRadius == r
-                                Surface(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { onRadiusChanged(r) },
-                                    color = if (selected) BoardColors.PurpleLight else BoardColors.SurfaceSubtle,
-                                    shape = RoundedCornerShape(7.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) BoardColors.PurplePrimary else BoardColors.BorderSubtle)
-                                ) {
-                                    Text(
-                                        text = label,
-                                        color = if (selected) BoardColors.PurplePrimary else BoardColors.TextPrimary,
-                                        fontSize = 8.5.sp,
-                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                        fontFamily = FontFamily.Monospace,
-                                        modifier = Modifier.padding(vertical = 6.dp, horizontal = 2.dp),
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
+                        IconButton(
+                            onClick = onCopyCode,
+                            modifier = Modifier.size(26.dp).background(BoardColors.PurpleLight, CircleShape)
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Kopyala", tint = BoardColors.PurplePrimary, modifier = Modifier.size(13.dp))
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(3.dp))
 
-                // KART 2: LOBİ GÜVENLİĞİ VE ÇEVRESEL KOŞULLAR (User Requirement 4 - Estetik Alan & Flu Yeşil Animasyonlu Sınır)
+                // KART 1: TUR SÜRESİ VE HARİTA BÜYÜKLÜĞÜ
+                TacticalCoreParametersCard(
+                    turnDuration = turnDuration,
+                    onDurationChanged = onDurationChanged,
+                    mapRadius = mapRadius,
+                    onRadiusChanged = onRadiusChanged,
+                    borderColor = cyanBorder,
+                    accentColor = BoardColors.PurplePrimary,
+                    isTablet = false,
+                    isCompact = true
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // KART 2: LOBİ GÜVENLİĞİ VE ÇEVRESEL KOŞULLAR
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = BoardColors.SurfaceSubtle,
-                    shape = RoundedCornerShape(10.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.2.dp, emeraldBorder)
+                    shape = RoundedCornerShape(9.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, emeraldBorder)
                 ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        Text(
-                            text = "LOBİ GÜVENLİĞİ VE ÇEVRESEL KOŞULLAR",
-                            color = BoardColors.NavyDark,
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        // Tehlike & PIN Satırları
+                    Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().height(28.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Mercan & Fırtınalar", color = BoardColors.TextPrimary, fontSize = 10.sp)
+                            Text("Mercan & Fırtınalar", color = BoardColors.TextPrimary, fontSize = 8.5.sp, fontWeight = FontWeight.SemiBold)
                             Switch(
                                 checked = enableHazards,
                                 onCheckedChange = onHazardsChanged,
+                                modifier = Modifier.scale(0.72f),
                                 colors = SwitchDefaults.colors(checkedThumbColor = BoardColors.CoralReef)
                             )
                         }
 
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().height(28.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Şifreli PIN", color = BoardColors.TextPrimary, fontSize = 10.sp)
+                            Text("Şifreli PIN", color = BoardColors.TextPrimary, fontSize = 8.5.sp, fontWeight = FontWeight.SemiBold)
                             Switch(
                                 checked = isPinEnabled,
                                 onCheckedChange = onTogglePin,
+                                modifier = Modifier.scale(0.72f),
                                 colors = SwitchDefaults.colors(checkedThumbColor = BoardColors.PurplePrimary)
                             )
                         }
@@ -1516,55 +1433,44 @@ private fun HostRoomConfigCard(
                             OutlinedTextField(
                                 value = pin,
                                 onValueChange = onPinChanged,
-                                label = { Text("4 Haneli PIN", fontSize = 9.sp) },
+                                label = { Text("4 Haneli PIN", fontSize = 8.sp) },
                                 keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
                                 singleLine = true,
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = BoardColors.PurplePrimary,
                                     unfocusedBorderColor = BoardColors.BorderSubtle
                                 ),
-                                modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
+                                modifier = Modifier.fillMaxWidth().height(42.dp).padding(top = 1.dp)
                             )
                         }
 
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().height(28.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Gizli / Private Lobi", color = BoardColors.TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                Text("Lobi listesinde gizle", color = BoardColors.TextSecondary, fontSize = 8.sp)
-                            }
+                            Text("Gizli / Özel Lobi", color = BoardColors.TextPrimary, fontSize = 8.5.sp, fontWeight = FontWeight.SemiBold)
                             Switch(
                                 checked = isPrivate,
                                 onCheckedChange = onTogglePrivate,
+                                modifier = Modifier.scale(0.72f),
                                 colors = SwitchDefaults.colors(checkedThumbColor = BoardColors.NavyDark)
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
-                // KART 3: ÖZEL TAKTİKSEL PARAMETRELER (Flu Mor Animasyonlu Sınır)
+                // KART 3: ÖZEL TAKTİKSEL PARAMETRELER
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = BoardColors.SurfaceSubtle,
-                    shape = RoundedCornerShape(10.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.2.dp, purpleBorder)
+                    shape = RoundedCornerShape(9.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, purpleBorder)
                 ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        Text(
-                            text = "ÖZEL TAKTİKSEL PARAMETRELER",
-                            color = BoardColors.NavyDark,
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Box(modifier = Modifier.weight(1f)) {
                                 TacticalParameterStepper(
                                     "Kalkan",
@@ -1587,8 +1493,8 @@ private fun HostRoomConfigCard(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Spacer(modifier = Modifier.height(1.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Box(modifier = Modifier.weight(1f)) {
                                 TacticalParameterStepper(
                                     "Delta EMP",
@@ -1612,8 +1518,8 @@ private fun HostRoomConfigCard(
                         }
 
                         if (enableHazards) {
-                            Spacer(modifier = Modifier.height(3.dp))
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Spacer(modifier = Modifier.height(1.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Box(modifier = Modifier.weight(1f)) {
                                     TacticalParameterStepper(
                                         "Resif",
@@ -1639,30 +1545,32 @@ private fun HostRoomConfigCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(5.dp))
 
-                // LOBİ OLUŞTUR VE RAKİP BEKLE BUTONU (En Altta, Ortalı & Estetik)
+                // LOBİ OLUŞTUR VE RAKİP BEKLE BUTONU
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
                     Button(
                         onClick = onCreateLobby,
-                        modifier = Modifier.fillMaxWidth(0.96f).height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(0.96f).height(42.dp),
+                        shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = BoardColors.PurplePrimary),
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Wifi, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Icon(Icons.Default.Wifi, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                "LOBİ OLUŞTUR VE RAKİP BEKLE",
+                                "LOBİ OLUŞTUR",
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 12.sp,
-                                letterSpacing = 0.5.sp
+                                fontSize = 11.5.sp,
+                                letterSpacing = 0.5.sp,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }
@@ -1851,8 +1759,9 @@ private fun LobbyBrowserView(
 
                                         val mapDesc = when (room.mapRadius) {
                                             5 -> "Standart (91 Bölge)"
-                                            6 -> "Geniş (127 Bölge)"
-                                            else -> "Devasa (169 Bölge)"
+                                            7 -> "Geniş (169 Bölge)"
+                                            8 -> "Devasa (217 Bölge)"
+                                            else -> "${1 + 3 * room.mapRadius * (room.mapRadius + 1)} Bölge"
                                         }
                                         Text(
                                             text = "Komutan: ${room.hostPlayerId} • ${room.turnDurationSeconds} sn • $mapDesc",
@@ -2092,7 +2001,10 @@ private fun JoinRoomConfigCard(
                     color = if (inputCode.length >= 7) Color.White else BoardColors.TextMuted,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -2250,8 +2162,9 @@ private fun VsAiConfigCard(
                             // 2. Harita Boyutu Rozeti
                             val mapName = when (mapRadius) {
                                 5 -> "91 Petek"
-                                6 -> "127 Petek"
-                                else -> "169 Petek"
+                                7 -> "169 Petek"
+                                8 -> "217 Petek"
+                                else -> "${1 + 3 * mapRadius * (mapRadius + 1)} Petek"
                             }
                             TacticalSettingBadge(emoji = "🗺️", text = mapName, color = Color(0xFF0284C7))
 
@@ -2316,40 +2229,16 @@ private fun VsAiConfigCard(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         // KART 1: SAVAŞ ALANI BÜYÜKLÜĞÜ (Estetik Alan & Flu Mavi Animasyonlu Sınır)
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = BoardColors.SurfaceSubtle,
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.2.dp, cyanBorder)
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Text("SAVAŞ ALANI BÜYÜKLÜĞÜ", color = BoardColors.NavyDark, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    listOf(5 to "Standart (91 Bölge)", 6 to "Geniş (127 Bölge)", 7 to "Devasa (169 Bölge)").forEach { (r, label) ->
-                                        val selected = mapRadius == r
-                                        Surface(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clickable { onRadiusChanged(r) },
-                                            color = if (selected) BoardColors.RedLight else BoardColors.SurfaceSubtle,
-                                            shape = RoundedCornerShape(8.dp),
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) BoardColors.CrimsonRed else BoardColors.BorderSubtle)
-                                        ) {
-                                            Text(
-                                                text = label,
-                                                color = if (selected) BoardColors.CrimsonRed else BoardColors.TextPrimary,
-                                                fontSize = 8.5.sp,
-                                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                                fontFamily = FontFamily.Monospace,
-                                                modifier = Modifier.padding(vertical = 7.dp, horizontal = 2.dp),
-                                                textAlign = TextAlign.Center
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        TacticalCoreParametersCard(
+                            turnDuration = null,
+                            onDurationChanged = null,
+                            mapRadius = mapRadius,
+                            onRadiusChanged = onRadiusChanged,
+                            borderColor = cyanBorder,
+                            accentColor = BoardColors.CrimsonRed,
+                            isTablet = true,
+                            isCompact = false
+                        )
 
                         Spacer(modifier = Modifier.height(8.dp))
 
@@ -2504,7 +2393,10 @@ private fun VsAiConfigCard(
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 13.sp,
-                                letterSpacing = 0.5.sp
+                                letterSpacing = 0.5.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -2527,7 +2419,7 @@ private fun VsAiConfigCard(
                     listOf(
                         Triple(AiDifficulty.RECRUIT, "1. ACEMİ", Color(0xFF16A34A)),
                         Triple(AiDifficulty.VETERAN, "2. KIDEMLİ", BoardColors.PurplePrimary),
-                        Triple(AiDifficulty.GRAND_ADMIRAL, "3. BÜYÜK AMİRAL", BoardColors.CrimsonRed)
+                        Triple(AiDifficulty.GRAND_ADMIRAL, "3. AMİRAL", BoardColors.CrimsonRed)
                     ).forEach { (diff, label, color) ->
                         val selected = selectedDifficulty == diff
                         Surface(
@@ -2544,11 +2436,13 @@ private fun VsAiConfigCard(
                             Text(
                                 text = label,
                                 color = if (selected) color else BoardColors.TextPrimary,
-                                fontSize = 9.sp,
+                                fontSize = 8.5.sp,
                                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                                 fontFamily = FontFamily.Monospace,
-                                modifier = Modifier.padding(vertical = 6.dp),
-                                textAlign = TextAlign.Center
+                                modifier = Modifier.padding(vertical = 5.dp, horizontal = 1.dp),
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }
@@ -2570,40 +2464,16 @@ private fun VsAiConfigCard(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // KART 1: SAVAŞ ALANI BÜYÜKLÜĞÜ (Estetik Alan & Flu Mavi Animasyonlu Sınır)
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = BoardColors.SurfaceSubtle,
-                    shape = RoundedCornerShape(10.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.2.dp, cyanBorder)
-                ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        Text("SAVAŞ ALANI BÜYÜKLÜĞÜ", color = BoardColors.NavyDark, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf(5 to "Standart (91)", 6 to "Geniş (127)", 7 to "Devasa (169)").forEach { (r, label) ->
-                                val selected = mapRadius == r
-                                Surface(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { onRadiusChanged(r) },
-                                    color = if (selected) BoardColors.RedLight else BoardColors.SurfaceSubtle,
-                                    shape = RoundedCornerShape(7.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) BoardColors.CrimsonRed else BoardColors.BorderSubtle)
-                                ) {
-                                    Text(
-                                        text = label,
-                                        color = if (selected) BoardColors.CrimsonRed else BoardColors.TextPrimary,
-                                        fontSize = 8.5.sp,
-                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                        fontFamily = FontFamily.Monospace,
-                                        modifier = Modifier.padding(vertical = 6.dp, horizontal = 2.dp),
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                TacticalCoreParametersCard(
+                    turnDuration = null,
+                    onDurationChanged = null,
+                    mapRadius = mapRadius,
+                    onRadiusChanged = onRadiusChanged,
+                    borderColor = cyanBorder,
+                    accentColor = BoardColors.CrimsonRed,
+                    isTablet = false,
+                    isCompact = false
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -2747,16 +2617,301 @@ private fun VsAiConfigCard(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                "YAPAY ZEKAYA KARŞI SAVAŞI BAŞLAT",
+                                "SAVAŞI BAŞLAT",
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 12.sp,
-                                letterSpacing = 0.5.sp
+                                fontSize = 11.5.sp,
+                                letterSpacing = 0.5.sp,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Temel Harekat Parametreleri & Savaş Alanı Büyüklüğü Kartı (Material Design 3 Taktik Konsol).
+ * Tüm telefon ve tablet ekran boyutlarında kusursuz hizalanan, ikonlu ve kapsül rozetli modern seçici mimarisi.
+ */
+@Composable
+private fun TacticalCoreParametersCard(
+    turnDuration: Int?,
+    onDurationChanged: ((Int) -> Unit)?,
+    mapRadius: Int,
+    onRadiusChanged: (Int) -> Unit,
+    borderColor: Color,
+    accentColor: Color,
+    isTablet: Boolean,
+    isCompact: Boolean = false
+) {
+    val hexCount = when (mapRadius) {
+        5 -> 91
+        7 -> 169
+        8 -> 217
+        else -> 1 + 3 * mapRadius * (mapRadius + 1)
+    }
+    val cyanAccent = Color(0xFF0284C7)
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = BoardColors.SurfaceSubtle,
+        shape = RoundedCornerShape(if (isCompact) 10.dp else 14.dp),
+        border = androidx.compose.foundation.BorderStroke(if (isCompact) 1.dp else 1.3.dp, borderColor),
+        shadowElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = if (isCompact) 8.dp else if (isTablet) 14.dp else 11.dp,
+                    vertical = if (isCompact) 5.dp else if (isTablet) 12.dp else 9.dp
+                ),
+            verticalArrangement = Arrangement.spacedBy(if (isCompact) 4.dp else if (isTablet) 10.dp else 7.dp)
+        ) {
+            // 1. ÜST KART BAŞLIĞI VE CANLI ÖZET KAPSÜLÜ
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(if (isCompact) 5.dp else 7.dp),
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(if (isCompact) 18.dp else 24.dp)
+                            .clip(RoundedCornerShape(if (isCompact) 5.dp else 7.dp))
+                            .background(cyanAccent.copy(alpha = 0.12f))
+                            .border(0.8.dp, cyanAccent.copy(alpha = 0.35f), RoundedCornerShape(if (isCompact) 5.dp else 7.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Radar,
+                            contentDescription = null,
+                            tint = cyanAccent,
+                            modifier = Modifier.size(if (isCompact) 11.dp else 14.dp)
+                        )
+                    }
+                    Text(
+                        text = if (turnDuration != null) "TEMEL HAREKAT PARAMETRELERİ" else "SAVAŞ ALANI BÜYÜKLÜĞÜ",
+                        color = BoardColors.NavyDark,
+                        fontSize = if (isCompact) 8.5.sp else if (isTablet) 10.5.sp else 9.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.4.sp,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+
+                // Canlı Seçim Özeti Rozeti
+                Surface(
+                    color = BoardColors.PureWhite,
+                    shape = RoundedCornerShape(50),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, accentColor.copy(alpha = 0.40f)),
+                    shadowElevation = 0.dp
+                ) {
+                    Text(
+                        text = if (turnDuration != null) "⏱ ${turnDuration}s • ⬡ $hexCount" else "⬡ $hexCount Bölge",
+                        color = accentColor,
+                        fontSize = if (isCompact) 7.5.sp else 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(
+                            horizontal = if (isCompact) 6.dp else 8.dp,
+                            vertical = if (isCompact) 1.5.dp else 2.5.dp
+                        )
+                    )
+                }
+            }
+
+            // 2. TUR SÜRESİ SEÇİCİSİ (Sadece Çevrimiçi Savaş Modunda)
+            if (turnDuration != null && onDurationChanged != null) {
+                Column(verticalArrangement = Arrangement.spacedBy(if (isCompact) 2.5.dp else 5.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Timer,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(if (isCompact) 10.dp else 12.dp)
+                        )
+                        Text(
+                            text = "TUR SÜRESİ",
+                            color = BoardColors.TextSecondary,
+                            fontSize = if (isCompact) 7.5.sp else 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.6.sp,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(if (isCompact) 5.dp else 8.dp)
+                    ) {
+                        val durationOptions = listOf(
+                            Triple(15, "Blitz", Icons.Default.ElectricBolt),
+                            Triple(45, "Standart", Icons.Default.Timer),
+                            Triple(60, "Taktik", Icons.Default.Shield)
+                        )
+                        durationOptions.forEach { (sec, title, iconVec) ->
+                            TacticalSelectorTile(
+                                title = title,
+                                badgeText = "$sec sn",
+                                icon = iconVec,
+                                selected = turnDuration == sec,
+                                accentColor = accentColor,
+                                isTablet = isTablet,
+                                isCompact = isCompact,
+                                onClick = { onDurationChanged(sec) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 3. HARİTA BÜYÜKLÜĞÜ SEÇİCİSİ
+            Column(verticalArrangement = Arrangement.spacedBy(if (isCompact) 2.5.dp else 5.dp)) {
+                if (turnDuration != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Sensors,
+                            contentDescription = null,
+                            tint = cyanAccent,
+                            modifier = Modifier.size(if (isCompact) 10.dp else 12.dp)
+                        )
+                        Text(
+                            text = "HARİTA BÜYÜKLÜĞÜ",
+                            color = BoardColors.TextSecondary,
+                            fontSize = if (isCompact) 7.5.sp else 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.6.sp,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(if (isCompact) 5.dp else 8.dp)
+                ) {
+                    val mapOptions = listOf(
+                        Triple(5, "Standart", "91 Bölge"),
+                        Triple(7, "Geniş", "169 Bölge"),
+                        Triple(8, "Devasa", "217 Bölge")
+                    )
+                    mapOptions.forEach { (r, title, subBadge) ->
+                        TacticalSelectorTile(
+                            title = title,
+                            badgeText = subBadge,
+                            icon = Icons.Default.Radar,
+                            selected = mapRadius == r,
+                            accentColor = accentColor,
+                            isTablet = isTablet,
+                            isCompact = isCompact,
+                            onClick = { onRadiusChanged(r) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 2 Katmanlı (Başlık + Kontrast Değer Kapsülü) Taktik Seçim Kartı.
+ * Tamamen homojen ve tam sığan beyaz arka plan ile tüm ekran tiplerinde kusursuz görünür.
+ */
+@Composable
+private fun TacticalSelectorTile(
+    title: String,
+    badgeText: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    accentColor: Color,
+    isTablet: Boolean,
+    isCompact: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tileShape = RoundedCornerShape(if (isCompact) 8.dp else 10.dp)
+
+    Surface(
+        modifier = modifier
+            .clip(tileShape)
+            .clickable(onClick = onClick),
+        shape = tileShape,
+        color = BoardColors.PureWhite,
+        border = androidx.compose.foundation.BorderStroke(
+            width = if (selected) 1.6.dp else 1.dp,
+            color = if (selected) accentColor else Color(0xFFCBD5E1)
+        ),
+        shadowElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    vertical = if (isCompact) 4.dp else if (isTablet) 7.dp else 5.5.dp,
+                    horizontal = if (isCompact) 4.dp else 6.dp
+                ),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(if (isCompact) 2.dp else if (isTablet) 4.dp else 3.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(if (isCompact) 2.5.dp else 3.5.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (selected) accentColor else BoardColors.TextSecondary,
+                    modifier = Modifier.size(if (isCompact) 10.dp else if (isTablet) 12.dp else 11.dp)
+                )
+                Text(
+                    text = title,
+                    color = if (selected) accentColor else BoardColors.NavyDark,
+                    fontSize = if (isCompact) 8.5.sp else if (isTablet) 10.5.sp else 9.5.sp,
+                    fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Bold,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = if (selected) accentColor else Color(0xFFF1F5F9),
+                shadowElevation = 0.dp
+            ) {
+                Text(
+                    text = badgeText,
+                    color = if (selected) Color.White else BoardColors.TextSecondary,
+                    fontSize = if (isCompact) 7.5.sp else if (isTablet) 8.5.sp else 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.padding(
+                        horizontal = if (isCompact) 7.dp else if (isTablet) 9.dp else 7.5.dp,
+                        vertical = if (isCompact) 1.dp else if (isTablet) 1.5.dp else 1.dp
+                    )
+                )
             }
         }
     }
@@ -2777,14 +2932,14 @@ private fun TacticalParameterStepper(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.5.dp),
+            .padding(vertical = 1.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp),
-            modifier = Modifier.weight(1f).padding(end = 4.dp)
+            modifier = Modifier.weight(1f).padding(end = 2.dp)
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(
@@ -2794,48 +2949,39 @@ private fun TacticalParameterStepper(
                     Text(
                         text = label,
                         color = BoardColors.NavyDark,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.1.sp,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        softWrap = false
                     )
                     if (onInfoClick != null) {
-                        Surface(
+                        GlossyInfoButton(
                             onClick = onInfoClick,
-                            color = accentColor.copy(alpha = 0.14f),
-                            shape = CircleShape,
-                            modifier = Modifier.size(18.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = "i",
-                                    color = accentColor,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                        }
+                            size = 16.dp,
+                            accentColor = accentColor,
+                            contentDescription = "$label Bilgisi"
+                        )
                     }
                 }
                 Text(
                     text = "($value / ${range.last})",
-                    color = BoardColors.TextMuted,
-                    fontSize = 8.5.sp,
-                    fontFamily = FontFamily.Monospace
+                    color = BoardColors.TextSecondary,
+                    fontSize = 7.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 0.2.sp
                 )
             }
         }
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(2.5.dp)
         ) {
             Surface(
                 modifier = Modifier
-                    .size(26.dp)
-                    .clip(RoundedCornerShape(6.dp))
+                    .size(21.dp)
+                    .clip(RoundedCornerShape(5.dp))
                     .clickable(enabled = value > range.first) { onValueChange(value - 1) },
                 color = if (value > range.first) BoardColors.SurfaceSubtle else Color(0xFFF1F5F9),
                 border = androidx.compose.foundation.BorderStroke(1.dp, BoardColors.BorderSubtle)
@@ -2844,23 +2990,23 @@ private fun TacticalParameterStepper(
                     Text(
                         text = "−",
                         color = if (value > range.first) BoardColors.NavyDark else BoardColors.TextMuted,
-                        fontSize = 13.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
                 }
             }
 
             Surface(
-                modifier = Modifier.size(width = 32.dp, height = 26.dp),
+                modifier = Modifier.size(width = 24.dp, height = 21.dp),
                 color = accentColor.copy(alpha = 0.12f),
-                shape = RoundedCornerShape(6.dp),
+                shape = RoundedCornerShape(5.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, accentColor.copy(alpha = 0.5f))
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
                         text = value.toString(),
                         color = accentColor,
-                        fontSize = 11.5.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace
                     )
@@ -2869,8 +3015,8 @@ private fun TacticalParameterStepper(
 
             Surface(
                 modifier = Modifier
-                    .size(26.dp)
-                    .clip(RoundedCornerShape(6.dp))
+                    .size(21.dp)
+                    .clip(RoundedCornerShape(5.dp))
                     .clickable(enabled = value < range.last) { onValueChange(value + 1) },
                 color = if (value < range.last) BoardColors.SurfaceSubtle else Color(0xFFF1F5F9),
                 border = androidx.compose.foundation.BorderStroke(1.dp, BoardColors.BorderSubtle)
@@ -2879,7 +3025,7 @@ private fun TacticalParameterStepper(
                     Text(
                         text = "+",
                         color = if (value < range.last) BoardColors.NavyDark else BoardColors.TextMuted,
-                        fontSize = 13.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
                 }
@@ -3032,15 +3178,20 @@ private fun TacticalInfoDialog(
                         }
                     }
 
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.size(28.dp).background(BoardColors.SurfaceSubtle, CircleShape)
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(BoardColors.SurfaceSubtle)
+                            .border(1.dp, BoardColors.BorderSubtle, CircleShape)
+                            .clickable(onClick = onDismiss),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             Icons.Default.Close,
                             contentDescription = "Kapat",
                             tint = BoardColors.TextSecondary,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                 }
@@ -3057,8 +3208,9 @@ private fun TacticalInfoDialog(
                         text = "● ${info.badge}",
                         color = info.accentColor,
                         fontSize = 9.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                     )
                 }

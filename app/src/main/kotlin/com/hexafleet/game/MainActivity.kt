@@ -22,8 +22,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.hexafleet.domain.game.ai.AiDifficulty
+import com.hexafleet.feature.board.audio.HexaFleetSoundManager
 import com.hexafleet.feature.board.model.GameCustomRules
 import com.hexafleet.feature.board.model.TacticalGameMode
+import com.hexafleet.feature.board.settings.HexaFleetSettings
 import com.hexafleet.feature.board.theme.BoardColors
 import com.hexafleet.feature.board.ui.TacticalBoardScreen
 import com.hexafleet.feature.lobby.ui.LobbyScreen
@@ -39,6 +41,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        HexaFleetSettings.init(this)
+        HexaFleetSoundManager.playStartupMusicOnce(this)
         hideSystemBars()
         extractRoomCodeFromIntent(intent)
 
