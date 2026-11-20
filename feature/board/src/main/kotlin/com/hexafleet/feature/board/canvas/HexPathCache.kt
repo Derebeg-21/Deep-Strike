@@ -2,7 +2,7 @@ package com.hexafleet.feature.board.canvas
 
 import androidx.compose.ui.graphics.Path
 import com.hexafleet.core.hexmath.HexLayout
-import com.hexafleet.core.hexmath.HexPoint
+import kotlin.math.roundToInt
 
 /**
  * 60 ve 120 FPS akıcılıkta sıfır çöp toplama (0 GC allocations) sağlamak için
@@ -13,12 +13,13 @@ class HexPathCache(
 ) {
     val layout = HexLayout(size = hexSize)
 
-    // Merkez 0,0 olan temel altıgen yolu
+    // Merkez 0,0 olan temel altıgen yolu (0 GC: doğrudan köşe döngüsü)
     val baseHexPath: Path = Path().apply {
-        val corners = (0 until 6).map { layout.hexCornerOffset(it) }
-        moveTo(corners[0].x, corners[0].y)
+        val firstCorner = layout.hexCornerOffset(0)
+        moveTo(firstCorner.x, firstCorner.y)
         for (i in 1 until 6) {
-            lineTo(corners[i].x, corners[i].y)
+            val c = layout.hexCornerOffset(i)
+            lineTo(c.x, c.y)
         }
         close()
     }
@@ -58,5 +59,24 @@ class HexPathCache(
         typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
         isAntiAlias = true
     }
-}
 
+    companion object {
+        // En son kullanılan 16 farklı hexSize için LRU önbellek (Sıfır GC tahsisi)
+        private val lruCache = object : java.util.LinkedHashMap<Int, HexPathCache>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, HexPathCache>?): Boolean {
+                return size > 16
+            }
+        }
+
+        /**
+         * Verilen hexSize için önbellekteki HexPathCache nesnesini döndürür, yoksa üretir.
+         * 0.1 hassasiyetle anahtarlanır; böylece mikro float oynamalarında bile sıfır çöp toplama garantilenir.
+         */
+        fun getOrCreate(hexSize: Float): HexPathCache {
+            val key = (hexSize * 10f).roundToInt()
+            return synchronized(lruCache) {
+                lruCache.getOrPut(key) { HexPathCache(hexSize) }
+            }
+        }
+    }
+}

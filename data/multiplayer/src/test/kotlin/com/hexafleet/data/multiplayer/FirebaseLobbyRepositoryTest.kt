@@ -61,5 +61,31 @@ class FirebaseLobbyRepositoryTest {
         val finalRoom = finalResult.getOrThrow()
         assertThat(finalRoom.status).isEqualTo(RoomStatus.IN_GAME)
     }
+
+    @Test
+    fun `forfeitMatch marks room as forfeited and records disconnected player`() {
+        val createResult = repository.createRoom(hostPlayerId = "host_123")
+        val roomCode = createResult.getOrThrow().roomCode
+        repository.joinRoom(roomCode, guestPlayerId = "guest_456")
+
+        val forfeitResult = repository.forfeitMatch(roomCode, forfeitedPlayerId = "guest_456")
+        assertThat(forfeitResult.isSuccess).isTrue()
+        val forfeitedRoom = forfeitResult.getOrThrow()
+
+        assertThat(forfeitedRoom.status).isEqualTo(RoomStatus.FORFEITED)
+        assertThat(forfeitedRoom.forfeitedPlayerId).isEqualTo("guest_456")
+    }
+
+    @Test
+    fun `sendHeartbeat updates lastHeartbeatTimestamp successfully`() {
+        val createResult = repository.createRoom(hostPlayerId = "host_123")
+        val roomCode = createResult.getOrThrow().roomCode
+
+        val success = repository.sendHeartbeat(roomCode, "host_123")
+        assertThat(success).isTrue()
+
+        val invalidPlayer = repository.sendHeartbeat(roomCode, "unknown_player")
+        assertThat(invalidPlayer).isFalse()
+    }
 }
 

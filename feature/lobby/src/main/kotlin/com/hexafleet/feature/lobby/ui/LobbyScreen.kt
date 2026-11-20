@@ -21,12 +21,17 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.runtime.CompositionLocalProvider
+import com.hexafleet.feature.board.ui.adaptive.LocalHexaFleetLayout
+import com.hexafleet.feature.board.ui.adaptive.rememberHexaFleetLayoutInfo
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -216,8 +221,11 @@ fun LobbyScreen(
         modifier = modifier
             .fillMaxSize()
             .background(BoardColors.LightBackground)
+            .displayCutoutPadding()
     ) {
-        val isTabletLayout = maxWidth >= 640.dp || maxWidth > maxHeight
+        val layoutInfo = rememberHexaFleetLayoutInfo(maxWidth, maxHeight)
+        val isTabletLayout = layoutInfo.isTabletOrExpanded
+        val useMasterDetailColumns = layoutInfo.useMasterDetailLobby
 
         // 4. Resim: Deep Strike Arka Plan Görseli (%75 Flu / Saydam, Tüm Ekranı Kaplayan)
         Image(
@@ -244,13 +252,23 @@ fun LobbyScreen(
                 )
         )
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = if (isTabletLayout) 20.dp else 12.dp, vertical = if (isTabletLayout) 10.dp else 6.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        CompositionLocalProvider(LocalHexaFleetLayout provides layoutInfo) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 960.dp)
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = if (isTabletLayout) 20.dp else 12.dp,
+                            vertical = if (isTabletLayout) 10.dp else 6.dp
+                        ),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
             // ==================== ÜST HEADER VE AKSİYONLAR ====================
             Row(
                 modifier = Modifier
@@ -577,7 +595,7 @@ fun LobbyScreen(
                                 magneticStorms = hostMagneticStorms,
                                 maxEmpStrikes = hostMaxEmpStrikes,
                                 maxLineBarrages = hostMaxLineBarrages,
-                                isTablet = isTabletLayout,
+                                isTablet = useMasterDetailColumns,
                                 onTogglePin = { isPinEnabled = it },
                                 onPinChanged = { if (it.length <= 4) hostPin = it },
                                 onTogglePrivate = { isPrivateRoom = it },
@@ -691,7 +709,7 @@ fun LobbyScreen(
                     magneticStorms = aiMagneticStorms,
                     maxEmpStrikes = aiMaxEmpStrikes,
                     maxLineBarrages = aiMaxLineBarrages,
-                    isTablet = isTabletLayout,
+                    isTablet = useMasterDetailColumns,
                     onDifficultySelected = { selectedAiDifficulty = it },
                     onRadiusChanged = { aiMapRadius = it },
                     onHazardsChanged = { aiEnableHazards = it },
@@ -714,6 +732,8 @@ fun LobbyScreen(
                         onStartAiGame(selectedAiDifficulty, aiMapRadius, aiEnableHazards, aiRules)
                     }
                 )
+            }
+                }
             }
         }
     }
@@ -1105,14 +1125,14 @@ private fun HostRoomConfigCard(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // 2. İKİ EŞİT SÜTUN: SOL (TUR & HARİTA + LOBİ GÜVENLİK) & SAĞ (ÖZEL PARAMETRELER + BUTON)
+                // 2. MASTER-DETAIL (ÇİFT SÜTUN: SOL %42 OYUN MODU & KURALLAR, SAĞ %58 FİLO ÖNİZLEME & DETAYLI PARAMETRELER)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // SOL SÜTUN (%50): KART 1 (TUR & HARİTA - Flu Mavi) ve KART 2 (LOBİ GÜVENLİK & ÇEVRE - Flu Yeşil)
+                    // SOL SÜTUN (%42): KART 1 (TUR & HARİTA - Flu Mavi) ve KART 2 (LOBİ GÜVENLİK & ÇEVRE - Flu Yeşil)
                     Column(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(0.42f),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         // KART 1: TUR SÜRESİ VE HARİTA BÜYÜKLÜĞÜ (User Requirement 3 - Estetik Alan & Flu Mavi Animasyonlu Sınır)
@@ -1204,10 +1224,18 @@ private fun HostRoomConfigCard(
                         }
                     }
 
-                    // SAĞ SÜTUN (%50): KART 3 (ÖZEL TAKTİKSEL PARAMETRELER - Flu Mor Animasyonlu Sınır)
+                    // SAĞ SÜTUN (%58): FİLO ÖNİZLEME & KART 3 (ÖZEL TAKTİKSEL PARAMETRELER - Flu Mor Animasyonlu Sınır)
                     Column(
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(0.58f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        MasterDetailFleetPreviewStrip(
+                            mapRadius = mapRadius,
+                            maxShields = maxShields,
+                            radioactiveZones = radioactiveZones,
+                            maxEmpStrikes = maxEmpStrikes,
+                            maxLineBarrages = maxLineBarrages
+                        )
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             color = BoardColors.SurfaceSubtle,
@@ -2044,6 +2072,63 @@ private fun TacticalSettingBadge(
 }
 
 /**
+ * Master-Detail (Geniş Ekran / Tablet) Lobi Sağ Sütununda (%60) yer alan
+ * Donanma Filo & Taktik Yetenek Önizleme Şeridi.
+ */
+@Composable
+private fun MasterDetailFleetPreviewStrip(
+    mapRadius: Int,
+    maxShields: Int,
+    radioactiveZones: Int,
+    maxEmpStrikes: Int,
+    maxLineBarrages: Int
+) {
+    val sectorCount = 1 + 3 * mapRadius * (mapRadius + 1)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = BoardColors.SurfaceSubtle,
+        shape = RoundedCornerShape(12.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BoardColors.BorderSubtle)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "⚓ DONANMA FİLOSU & HAREKÂT ÖNİZLEME",
+                    color = BoardColors.NavyDark,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = FontFamily.Monospace
+                )
+                Text(
+                    text = "4 GEMİ • $sectorCount SEKTÖR",
+                    color = BoardColors.PurplePrimary,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                TacticalSettingBadge(emoji = "🚢", text = "Korvet (2)", color = BoardColors.NavyAccent)
+                TacticalSettingBadge(emoji = "⚡", text = "Delta (3•${maxEmpStrikes}x)", color = Color(0xFF0284C7))
+                TacticalSettingBadge(emoji = "📡", text = "İHA G. (3)", color = BoardColors.PurplePrimary)
+                TacticalSettingBadge(emoji = "💥", text = "Amiral (4•${maxLineBarrages}x)", color = BoardColors.CrimsonRed)
+            }
+        }
+    }
+}
+
+/**
  * YAPAY ZEKAYA KARŞI OPERASYON KARTI (3 Zorluk Seviyesi)
  */
 @Composable
@@ -2185,8 +2270,8 @@ private fun VsAiConfigCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // SOL SÜTUN (%50): AI ZORLUK SEÇİMİ + HARİTA BOYUTU + TEHLİKE SWITCH
-                    Column(modifier = Modifier.weight(1f)) {
+                    // SOL SÜTUN (%42): AI ZORLUK SEÇİMİ + HARİTA BOYUTU + TEHLİKE SWITCH
+                    Column(modifier = Modifier.weight(0.42f)) {
                         Text(
                             text = "YAPAY ZEKA KOMUTANI (3 SEVİYE)",
                             color = BoardColors.NavyDark,
@@ -2266,11 +2351,18 @@ private fun VsAiConfigCard(
                         }
                     }
 
-                    // SAĞ SÜTUN (%50): ÖZEL TAKTİKSEL PARAMETRELER (Aşağıya hizalı, Çevrimiçi Savaş ile dengeli)
+                    // SAĞ SÜTUN (%58): FİLO ÖNİZLEME & ÖZEL TAKTİKSEL PARAMETRELER
                     Column(
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(0.58f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Spacer(modifier = Modifier.height(32.dp))
+                        MasterDetailFleetPreviewStrip(
+                            mapRadius = mapRadius,
+                            maxShields = maxShields,
+                            radioactiveZones = radioactiveZones,
+                            maxEmpStrikes = maxEmpStrikes,
+                            maxLineBarrages = maxLineBarrages
+                        )
 
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
@@ -2405,60 +2497,10 @@ private fun VsAiConfigCard(
         } else {
             // ==================== MOBİL DÜZENİ: TEK EKRAN (KOMPAKT, SIFIR KAYDIRMA) ====================
             Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = "YAPAY ZEKA KOMUTANI SEÇİMİ (3 SEVİYE)",
-                    color = BoardColors.NavyDark,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                )
-                Spacer(modifier = Modifier.height(5.dp))
-
-                // 3 Seviye Yatay Segment Seçici
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(
-                        Triple(AiDifficulty.RECRUIT, "1. ACEMİ", Color(0xFF16A34A)),
-                        Triple(AiDifficulty.VETERAN, "2. KIDEMLİ", BoardColors.PurplePrimary),
-                        Triple(AiDifficulty.GRAND_ADMIRAL, "3. AMİRAL", BoardColors.CrimsonRed)
-                    ).forEach { (diff, label, color) ->
-                        val selected = selectedDifficulty == diff
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { onDifficultySelected(diff) },
-                            color = if (selected) color.copy(alpha = 0.12f) else BoardColors.SurfaceSubtle,
-                            shape = RoundedCornerShape(8.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                if (selected) 1.5.dp else 1.dp,
-                                if (selected) color else BoardColors.BorderSubtle
-                            )
-                        ) {
-                            Text(
-                                text = label,
-                                color = if (selected) color else BoardColors.TextPrimary,
-                                fontSize = 8.5.sp,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                fontFamily = FontFamily.Monospace,
-                                modifier = Modifier.padding(vertical = 5.dp, horizontal = 1.dp),
-                                textAlign = TextAlign.Center,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-                val aiStrategyDesc = when (selectedDifficulty) {
-                    AiDifficulty.RECRUIT -> "Kolay • Rastgele keşif atışları, seyrek çevre takibi."
-                    AiDifficulty.VETERAN -> "Orta • 6 eksenli Olasılık Haritası (H-PDF) & parite avlanma."
-                    AiDifficulty.GRAND_ADMIRAL -> "Uzman • Gelişmiş H-PDF + ship-fitting + İHA ve kalkan."
-                }
-                Text(
-                    text = aiStrategyDesc,
-                    color = BoardColors.TextSecondary,
-                    fontSize = 8.5.sp,
-                    fontFamily = FontFamily.Monospace
+                // KART 0: YAPAY ZEKA KOMUTANI SEÇİMİ (3 SEVİYE - İkonlu & Kapsül Rozetli M3 Tasarım)
+                AiCommanderSelectorCard(
+                    selectedDifficulty = selectedDifficulty,
+                    onDifficultySelected = onDifficultySelected
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -3051,30 +3093,33 @@ data class TacticalParamInfo(
     val description: String,
     val tacticalImpact: String,
     val strategicTip: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val imageRes: Int? = null
 )
 
 fun getTacticalParamInfo(type: TacticalParamType): TacticalParamInfo {
     return when (type) {
         TacticalParamType.SHIELD -> TacticalParamInfo(
-            title = "Aegis Kalkanı",
-            subtitle = "7 Peteklik Koruma Güç Alanı",
+            title = "Aegis Savunma Kalkanı",
+            subtitle = "7 Peteklik Koruma Güç Kubbesi (2 CP)",
             badge = "Savunma Modülü",
             accentColor = BoardColors.PurplePrimary,
             description = "Seçtiğiniz merkezi koordinatın etrafında 7 peteklik yüksek teknolojili bir koruma kubbesi kurar.",
             tacticalImpact = "Kubbe altındaki dost gemiler düşman roket ve torpido saldırılarını sönümler. Merkezine doğrudan 2 darbe alana kadar altındaki filoyu hasardan korur.",
             strategicTip = "Amiral gemisi gibi büyük ve kıymetli gemilerinizi kalkan kubbesi altına konuşlandırarak düşmanın ilk tur erken darbelerinden koruyabilirsiniz.",
-            icon = Icons.Default.Shield
+            icon = Icons.Default.Shield,
+            imageRes = null
         )
         TacticalParamType.RADIOACTIVE -> TacticalParamInfo(
             title = "Radyoaktif Sis Bölgesi",
-            subtitle = "İHA Tespitine Karşı Kamuflaj (2 Petek)",
+            subtitle = "İHA Radar Kamuflaj Perdesi (2 Petek)",
             badge = "Elektronik Harp & Gizlilik",
             accentColor = Color(0xFF16A34A),
             description = "Deniz üzerinde 2 petek uzunluğunda taktiksel yeşil radyoaktif siber sis koridoru oluşturur.",
             tacticalImpact = "Bu sis hattı içindeki gemiler, düşman İHA hava keşifleri (Recon drone) tarafından taranamaz ve tespit edilemez.",
             strategicTip = "Sisi doğrudan gemilerinizin üzerine yerleştirebileceğiniz gibi, boş deniz alanlarına yerleştirerek rakibin keşif İHA'larını tuzağa düşürebilirsiniz.",
-            icon = Icons.Default.Warning
+            icon = Icons.Default.Sensors,
+            imageRes = com.hexafleet.feature.board.R.drawable.hazard_radioactive
         )
         TacticalParamType.REEF -> TacticalParamInfo(
             title = "Mercan Resifi",
@@ -3084,7 +3129,8 @@ fun getTacticalParamInfo(type: TacticalParamType): TacticalParamInfo {
             description = "Deniz tabanından yükselen renkli ve sarp mercan resifleridir. Geçit vermeyen doğal su altı kayalık bariyeri oluşturur.",
             tacticalImpact = "Ne dost ne düşman gemileri bu peteklere konuşlandırılamaz. Düşmanın düz hat torpido ve su üstü atışları bu mercan resiflerine çarparak engellenir.",
             strategicTip = "Mercan resiflerinin arkasını doğal bir siper olarak kullanarak filonuzu düşman torpido hatlarından saklayabilirsiniz.",
-            icon = Icons.Default.Landscape
+            icon = Icons.Default.Landscape,
+            imageRes = com.hexafleet.feature.board.R.drawable.terrain_coral_reef
         )
         TacticalParamType.STORM -> TacticalParamInfo(
             title = "Manyetik Fırtına Bölgesi",
@@ -3094,27 +3140,30 @@ fun getTacticalParamInfo(type: TacticalParamType): TacticalParamInfo {
             description = "Yüksek manyetik ve sismik iyon yoğunluğuna sahip mor anomalilerdir.",
             tacticalImpact = "SADECE sizin haritanızda görünür; düşman fırtınanın nerede olduğunu asla göremez! Fırtına içine isabet eden düşman atışlarının hasarı emilir ve radar parazitlenir.",
             strategicTip = "Fırtına bölgelerini gizli bir koruma hattı gibi kullanarak gemilerinizin omurgasını fırtına içine konuşlandırabilirsiniz.",
-            icon = Icons.Default.ElectricBolt
+            icon = Icons.Default.ElectricBolt,
+            imageRes = com.hexafleet.feature.board.R.drawable.hazard_storm
         )
         TacticalParamType.EMP -> TacticalParamInfo(
             title = "Delta EMP İyon Şoku",
-            subtitle = "Kalkan Çökertme & 1 CP Silme (0 CP)",
+            subtitle = "Kalkan Kırma & -1 CP Sabotaj (0 CP)",
             badge = "Delta Kruvazörü Özel",
             accentColor = Color(0xFF06B6D4),
             description = "Delta Taarruz Kruvazörü hayattayken kullanılabilen 7 peteklik yüksek güçlü elektromanyetik darbedir.",
             tacticalImpact = "Hedef sektördeki düşman Aegis Kalkanı'nı anında çökertir. Eğer sektörde düşman gemisi varsa, rakibin bir sonraki turundaki Komut Puanı (CP) 3 yerine 2'ye düşer.",
             strategicTip = "Düşman kalkan açtığında doğrudan kalkanı delmek veya kritik turlarda rakibin hamle sayısını kısıtlamak için kullanın.",
-            icon = Icons.Default.ElectricBolt
+            icon = Icons.Default.ElectricBolt,
+            imageRes = com.hexafleet.feature.board.R.drawable.ship_delta
         )
         TacticalParamType.BARRAGE -> TacticalParamInfo(
             title = "Amiral Ağır Bombardımanı",
-            subtitle = "5 Peteklik Doğrusal Süpürme (3 CP)",
+            subtitle = "5 Peteklik Doğrusal Salvo (3 CP)",
             badge = "Amiral Zırhlısı Özel",
             accentColor = BoardColors.CrimsonRed,
             description = "Amiral Zırhlısı hayattayken kullanılabilen, altıgen eksen boyunca ardışık 5 peteği aynı anda vuran devasa top salvosudur.",
             tacticalImpact = "Havadan bombardıman yapıldığı için mercan resifleri mermileri durduramaz. Geniş deniz koridorlarında saklanan gemileri tek hamlede tarayıp vurur.",
             strategicTip = "Düşmanın uzun gemilerini (Amiral/İHA) veya resif arkasına gizlenmiş filoları süpürmek için maçın dönüm noktalarında ateşleyin.",
-            icon = Icons.Default.AutoAwesome
+            icon = Icons.Default.AutoAwesome,
+            imageRes = com.hexafleet.feature.board.R.drawable.ship_flagship
         )
     }
 }
@@ -3124,18 +3173,31 @@ private fun TacticalInfoDialog(
     info: TacticalParamInfo,
     onDismiss: () -> Unit
 ) {
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+    val layoutInfo = com.hexafleet.feature.board.ui.adaptive.currentHexaFleetLayoutInfo()
+    val isTablet = layoutInfo.isTabletOrExpanded
+    val dialogWidth = when {
+        layoutInfo.screenWidth >= 840.dp -> 500.dp
+        layoutInfo.screenWidth >= 600.dp -> 460.dp
+        else -> layoutInfo.screenWidth * 0.94f
+    }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = BoardColors.PureWhite,
-            border = androidx.compose.foundation.BorderStroke(1.5.dp, info.accentColor.copy(alpha = 0.6f)),
-            shadowElevation = 12.dp,
-            modifier = Modifier.fillMaxWidth(0.94f).padding(6.dp)
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, info.accentColor.copy(alpha = 0.65f)),
+            shadowElevation = 14.dp,
+            modifier = Modifier
+                .width(dialogWidth)
+                .padding(horizontal = 6.dp, vertical = 10.dp)
         ) {
             Column(
-                modifier = Modifier.padding(18.dp)
+                modifier = Modifier.padding(if (isTablet) 18.dp else 15.dp)
             ) {
-                // Başlık Satırı
+                // 1. ÜST BAŞLIK SATIRI (Gerçek Görsel Önizleme + Tek Satır Başlık/Alt Başlık + Kapat)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -3143,37 +3205,65 @@ private fun TacticalInfoDialog(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.weight(1f)
+                        horizontalArrangement = Arrangement.spacedBy(11.dp),
+                        modifier = Modifier.weight(1f).padding(end = 6.dp)
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(42.dp)
+                                .size(if (isTablet) 48.dp else 44.dp)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(info.accentColor.copy(alpha = 0.12f))
-                                .border(1.2.dp, info.accentColor.copy(alpha = 0.4f), RoundedCornerShape(12.dp)),
+                                .border(1.2.dp, info.accentColor.copy(alpha = 0.45f), RoundedCornerShape(12.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = info.icon,
-                                contentDescription = null,
-                                tint = info.accentColor,
-                                modifier = Modifier.size(24.dp)
-                            )
+                            if (info.imageRes != null) {
+                                Image(
+                                    painter = painterResource(info.imageRes),
+                                    contentDescription = info.title,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(4.dp),
+                                    contentScale = ContentScale.Fit
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = info.icon,
+                                    contentDescription = info.title,
+                                    tint = info.accentColor,
+                                    modifier = Modifier.size(25.dp)
+                                )
+                            }
                         }
 
-                        Column {
+                        val titleFontSize = when {
+                            isTablet -> 14.sp
+                            info.title.length >= 22 -> 11.4.sp
+                            info.title.length >= 18 -> 12.2.sp
+                            else -> 13.sp
+                        }
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
                             Text(
                                 text = info.title,
                                 color = BoardColors.NavyDark,
-                                fontSize = 13.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
+                                fontSize = titleFontSize,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = info.subtitle,
                                 color = BoardColors.TextSecondary,
-                                fontSize = 10.sp
+                                fontSize = if (isTablet) 10.sp else 9.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -3196,60 +3286,187 @@ private fun TacticalInfoDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // Rozet
+                // 2. TAKTİKSEL ROZET KAPSÜLÜ
                 Surface(
                     color = info.accentColor.copy(alpha = 0.10f),
-                    shape = RoundedCornerShape(6.dp),
-                    border = androidx.compose.foundation.BorderStroke(0.8.dp, info.accentColor.copy(alpha = 0.3f))
+                    shape = RoundedCornerShape(7.dp),
+                    border = androidx.compose.foundation.BorderStroke(0.9.dp, info.accentColor.copy(alpha = 0.35f))
                 ) {
-                    Text(
-                        text = "● ${info.badge}",
-                        color = info.accentColor,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        softWrap = false,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(info.accentColor)
+                        )
+                        Text(
+                            text = info.badge,
+                            color = info.accentColor,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Taktiksel Açıklama Kutusu
-                Surface(
-                    color = BoardColors.SurfaceSubtle,
-                    shape = RoundedCornerShape(10.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, BoardColors.BorderSubtle),
-                    modifier = Modifier.fillMaxWidth()
+                // 3. MODERNİZE EDİLMİŞ 3 KATMANLI TAKTİK BİLGİ KARTLARI
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
-                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("ℹ", color = info.accentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+
+                    // A. Sistem Tanımı ve Mekanik
+                    Surface(
+                        color = BoardColors.SurfaceSubtle,
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BoardColors.BorderSubtle),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(RoundedCornerShape(5.dp))
+                                        .background(info.accentColor.copy(alpha = 0.14f))
+                                        .border(0.7.dp, info.accentColor.copy(alpha = 0.35f), RoundedCornerShape(5.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Radar,
+                                        contentDescription = null,
+                                        tint = info.accentColor,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                                Text(
+                                    text = "SİSTEM TANIMI & MEKANİK",
+                                    color = BoardColors.NavyDark,
+                                    fontSize = 8.8.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
                             Text(
                                 text = info.description,
                                 color = BoardColors.NavyDark,
-                                fontSize = 11.sp,
-                                lineHeight = 15.sp
-                            )
-                        }
-
-                        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("⚔", color = info.accentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Text(
-                                text = info.tacticalImpact,
-                                color = BoardColors.TextPrimary,
                                 fontSize = 10.5.sp,
                                 lineHeight = 14.5.sp
                             )
                         }
+                    }
 
-                        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("💡", color = Color(0xFFF59E0B), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    // B. Muharebe ve Taktiksel Etki (3D Target İkonlu)
+                    Surface(
+                        color = info.accentColor.copy(alpha = 0.05f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, info.accentColor.copy(alpha = 0.25f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(RoundedCornerShape(5.dp))
+                                        .background(info.accentColor.copy(alpha = 0.14f))
+                                        .border(0.7.dp, info.accentColor.copy(alpha = 0.35f), RoundedCornerShape(5.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Image(
+                                        painter = painterResource(com.hexafleet.feature.board.R.drawable.ic_target_3d),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(13.dp),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                }
+                                Text(
+                                    text = "MUHAREBE & TAKTİKSEL ETKİ",
+                                    color = info.accentColor,
+                                    fontSize = 8.8.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                            Text(
+                                text = info.tacticalImpact,
+                                color = BoardColors.TextPrimary,
+                                fontSize = 10.2.sp,
+                                lineHeight = 14.2.sp
+                            )
+                        }
+                    }
+
+                    // C. Komutan Stratejisi (Eski sarı ampül 💡 yerine modern Taktik Komuta Rozeti)
+                    val goldAccent = Color(0xFFD97706)
+                    Surface(
+                        color = Color(0xFFFEF3C7).copy(alpha = 0.55f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.35f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(RoundedCornerShape(5.dp))
+                                        .background(Color(0xFFF59E0B).copy(alpha = 0.18f))
+                                        .border(0.7.dp, goldAccent.copy(alpha = 0.45f), RoundedCornerShape(5.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Security,
+                                        contentDescription = null,
+                                        tint = goldAccent,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                                Text(
+                                    text = "KOMUTAN STRATEJİSİ",
+                                    color = Color(0xFFB45309),
+                                    fontSize = 8.8.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
                             Text(
                                 text = info.strategicTip,
-                                color = Color(0xFFB45309),
+                                color = Color(0xFF92400E),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium,
                                 lineHeight = 14.sp
@@ -3279,6 +3496,228 @@ private fun TacticalInfoDialog(
     }
 }
 
+/**
+ * Tüm ekran boyutları için modernize edilmiş, ikonlu ve kapsül rozetli Yapay Zeka Komutanı Seçici Kartı (User Requirement 6).
+ */
+@Composable
+private fun AiCommanderSelectorCard(
+    selectedDifficulty: AiDifficulty,
+    onDifficultySelected: (AiDifficulty) -> Unit
+) {
+    val activeAccent = when (selectedDifficulty) {
+        AiDifficulty.RECRUIT -> Color(0xFF16A34A)
+        AiDifficulty.VETERAN -> BoardColors.PurplePrimary
+        AiDifficulty.GRAND_ADMIRAL -> BoardColors.CrimsonRed
+    }
+    val activeRankBadge = when (selectedDifficulty) {
+        AiDifficulty.RECRUIT -> "SEVİYE 1 • KOLAY"
+        AiDifficulty.VETERAN -> "SEVİYE 2 • ORTA"
+        AiDifficulty.GRAND_ADMIRAL -> "SEVİYE 3 • UZMAN"
+    }
+    val aiStrategyDesc = when (selectedDifficulty) {
+        AiDifficulty.RECRUIT -> "Kolay • Rastgele keşif atışları, seyrek çevre takibi."
+        AiDifficulty.VETERAN -> "Orta • 6 eksenli Olasılık Haritası (H-PDF) & parite avlanma."
+        AiDifficulty.GRAND_ADMIRAL -> "Uzman • Gelişmiş H-PDF + ship-fitting + İHA ve kalkan."
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = BoardColors.SurfaceSubtle,
+        shape = RoundedCornerShape(14.dp),
+        border = androidx.compose.foundation.BorderStroke(1.3.dp, activeAccent.copy(alpha = 0.45f)),
+        shadowElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 11.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            // 1. Üst Kart Başlığı & Canlı Rütbe Kapsülü
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(activeAccent.copy(alpha = 0.12f))
+                            .border(0.8.dp, activeAccent.copy(alpha = 0.35f), RoundedCornerShape(7.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(com.hexafleet.feature.lobby.R.drawable.ic_ai_robot_avatar),
+                            contentDescription = null,
+                            modifier = Modifier.size(17.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                    Text(
+                        text = "YAPAY ZEKA KOMUTANI (3 SEVİYE)",
+                        color = BoardColors.NavyDark,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+
+                Surface(
+                    color = activeAccent,
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Text(
+                        text = activeRankBadge,
+                        color = Color.White,
+                        fontSize = 7.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            // 2. İkonlu 3 Seviye Seçici Butonları (Yazının üzerine asla gelmeyen 2 katmanlı M3 mimarisi)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                val options = listOf(
+                    Triple(AiDifficulty.RECRUIT, "1. ACEMİ", "KOLAY" to Color(0xFF16A34A)),
+                    Triple(AiDifficulty.VETERAN, "2. KIDEMLİ", "ORTA" to BoardColors.PurplePrimary),
+                    Triple(AiDifficulty.GRAND_ADMIRAL, "3. AMİRAL", "UZMAN" to BoardColors.CrimsonRed)
+                )
+
+                options.forEach { (diff, label, badgePair) ->
+                    val (rankText, color) = badgePair
+                    val selected = selectedDifficulty == diff
+                    val tileShape = RoundedCornerShape(10.dp)
+
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(tileShape)
+                            .clickable { onDifficultySelected(diff) },
+                        shape = tileShape,
+                        color = BoardColors.PureWhite,
+                        border = androidx.compose.foundation.BorderStroke(
+                            width = if (selected) 1.7.dp else 1.dp,
+                            color = if (selected) color else Color(0xFFCBD5E1)
+                        ),
+                        shadowElevation = if (selected) 1.5.dp else 0.dp
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp, horizontal = 4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(3.5.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                when (diff) {
+                                    AiDifficulty.RECRUIT -> {
+                                        Icon(
+                                            imageVector = Icons.Default.Radar,
+                                            contentDescription = null,
+                                            tint = if (selected) color else BoardColors.TextSecondary,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
+                                    AiDifficulty.VETERAN -> {
+                                        Image(
+                                            painter = painterResource(com.hexafleet.feature.lobby.R.drawable.ic_target_3d),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(13.dp),
+                                            contentScale = ContentScale.Fit
+                                        )
+                                    }
+                                    AiDifficulty.GRAND_ADMIRAL -> {
+                                        Icon(
+                                            imageVector = Icons.Default.Shield,
+                                            contentDescription = null,
+                                            tint = if (selected) color else BoardColors.TextSecondary,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(3.5.dp))
+                                Text(
+                                    text = label,
+                                    color = if (selected) color else BoardColors.NavyDark,
+                                    fontSize = 9.sp,
+                                    fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = if (selected) color else Color(0xFFF1F5F9)
+                            ) {
+                                Text(
+                                    text = rankText,
+                                    color = if (selected) Color.White else BoardColors.TextSecondary,
+                                    fontSize = 7.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 1.2.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Alt Taktik Doktrin Açıklama Şeridi
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = activeAccent.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(8.dp),
+                border = androidx.compose.foundation.BorderStroke(0.8.dp, activeAccent.copy(alpha = 0.25f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Image(
+                        painter = painterResource(com.hexafleet.feature.lobby.R.drawable.ic_target_3d),
+                        contentDescription = null,
+                        modifier = Modifier.size(13.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                    Text(
+                        text = aiStrategyDesc,
+                        color = BoardColors.NavyDark,
+                        fontSize = 8.2.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun AiDifficultyCard(
     difficulty: AiDifficulty,
@@ -3292,48 +3731,99 @@ private fun AiDifficultyCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
-        color = if (isSelected) badgeColor.copy(alpha = 0.08f) else BoardColors.SurfaceSubtle,
+        color = if (isSelected) BoardColors.PureWhite else BoardColors.SurfaceSubtle,
         shape = RoundedCornerShape(12.dp),
         border = androidx.compose.foundation.BorderStroke(
-            if (isSelected) 1.5.dp else 1.dp,
+            if (isSelected) 1.7.dp else 1.dp,
             if (isSelected) badgeColor else BoardColors.BorderSubtle
-        )
+        ),
+        shadowElevation = if (isSelected) 2.dp else 0.dp
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(11.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Sol Rütbe İkon Rozeti (Yazının üzerine asla binmez)
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(badgeColor.copy(alpha = 0.12f))
+                    .border(1.dp, badgeColor.copy(alpha = 0.40f), RoundedCornerShape(9.dp)),
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = title,
-                    color = if (isSelected) badgeColor else BoardColors.NavyDark,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                )
-                Surface(
-                    color = badgeColor.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(6.dp)
-                ) {
-                    Text(
-                        text = badge,
-                        color = badgeColor,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
+                when (difficulty) {
+                    AiDifficulty.RECRUIT -> {
+                        Icon(
+                            imageVector = Icons.Default.Radar,
+                            contentDescription = null,
+                            tint = badgeColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    AiDifficulty.VETERAN -> {
+                        Image(
+                            painter = painterResource(com.hexafleet.feature.lobby.R.drawable.ic_target_3d),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                    AiDifficulty.GRAND_ADMIRAL -> {
+                        Icon(
+                            imageVector = Icons.Default.Shield,
+                            contentDescription = null,
+                            tint = badgeColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = description,
-                color = BoardColors.TextSecondary,
-                fontSize = 10.sp,
-                lineHeight = 14.sp
-            )
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = title,
+                        color = if (isSelected) badgeColor else BoardColors.NavyDark,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                    Surface(
+                        color = if (isSelected) badgeColor else badgeColor.copy(alpha = 0.14f),
+                        shape = RoundedCornerShape(50)
+                    ) {
+                        Text(
+                            text = badge,
+                            color = if (isSelected) Color.White else badgeColor,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = description,
+                    color = BoardColors.TextSecondary,
+                    fontSize = 9.8.sp,
+                    lineHeight = 13.5.sp
+                )
+            }
         }
     }
 }

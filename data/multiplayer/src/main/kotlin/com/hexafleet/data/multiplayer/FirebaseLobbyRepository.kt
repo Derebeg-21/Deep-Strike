@@ -93,7 +93,10 @@ class FirebaseLobbyRepository {
         isPrivate: Boolean = false,
         preferredCode: String? = null
     ): Result<LobbyRoom> {
-        val activeCodes = activeRooms.filter { it.value.value?.status != RoomStatus.FINISHED }.keys.toSet()
+        val activeCodes = activeRooms.filter { 
+            val s = it.value.value?.status
+            s != RoomStatus.FINISHED && s != RoomStatus.FORFEITED 
+        }.keys.toSet()
         val roomCode = if (!preferredCode.isNullOrBlank() && preferredCode !in activeCodes && RoomCodeGenerator.isValid(preferredCode)) {
             preferredCode
         } else {
@@ -242,6 +245,57 @@ class FirebaseLobbyRepository {
 
         return Result.success(finalRoom)
     }
+
+    /**
+     * Oyuncunun aktif olduğunu bildiren kalp atışı (heartbeat) gönderir.
+     */
+    fun sendHeartbeat(roomCode: String, playerId: String): Boolean {
+        val normalized = roomCode.trim().uppercase()
+        val flow = activeRooms[normalized] ?: return false
+        val current = flow.value ?: return false
+        if (current.hostPlayerId != playerId && current.guestPlayerId != playerId) return false
+
+        val updated = current.copy(lastHeartbeatTimestamp = System.currentTimeMillis())
+        flow.value = updated
+        try {
+            firebaseDatabase?.getReference("rooms")?.child(normalized)?.child("lastHeartbeatTimestamp")
+                ?.setValue(updated.lastHeartbeatTimestamp)
+        } catch (_: Throwable) {}
+        return true
+    }
+
+    /**
+     * Rakip oyuncunun 15 saniyeden uzun süre yanıt vermemesi (Disconnect) veya oyunu terk etmesi (Rage-Quit)
+     * durumunda maçı hükmen mağlubiyet (FORFEITED) ile dürüst oyuncu lehine sonuçlandırır.
+     */
+    fun forfeitMatch(roomCode: String, forfeitedPlayerId: String): Result<LobbyRoom> {
+        val normalized = roomCode.trim().uppercase()
+        val flow = activeRooms[normalized]
+            ?: return Result.failure(IllegalArgumentException("Oda bulunamadı: $normalized"))
+        val current = flow.value ?: return Result.failure(IllegalArgumentException("Oda kapalı."))
+
+        val updated = current.copy(
+            status = RoomStatus.FORFEITED,
+            forfeitedPlayerId = forfeitedPlayerId
+        )
+        flow.value = updated
+        updatePublicRooms()
+
+        try {
+            firebaseDatabase?.getReference("rooms")?.child(normalized)?.setValue(updated.toMap())
+        } catch (_: Throwable) {}
+
+        return Result.success(updated)
+    }
+
+    /**
+     * Odanın kalp atışı zaman aşımına (varsayılan 15 saniye) uğrayıp uğramadığını kontrol eder.
+     */
+    fun isHeartbeatTimedOut(room: LobbyRoom, timeoutMillis: Long = 15_000L): Boolean {
+        if (room.status != RoomStatus.IN_GAME) return false
+        val elapsed = System.currentTimeMillis() - room.lastHeartbeatTimestamp
+        return elapsed > timeoutMillis
+    }
 }
 
 /**
@@ -262,7 +316,8 @@ private fun LobbyRoom.toMap(): Map<String, Any?> = mapOf(
     "guestCommitmentHash" to guestCommitmentHash,
     "currentTurnPlayerId" to currentTurnPlayerId,
     "turnNumber" to turnNumber,
-    "lastHeartbeatTimestamp" to lastHeartbeatTimestamp
+    "lastHeartbeatTimestamp" to lastHeartbeatTimestamp,
+    "forfeitedPlayerId" to forfeitedPlayerId
 )
 
 /**
@@ -286,6 +341,7 @@ private fun DataSnapshot.toLobbyRoom(): LobbyRoom? {
         val currentTurn = child("currentTurnPlayerId").getValue(String::class.java) ?: host
         val turnNum = child("turnNumber").getValue(Long::class.java)?.toInt() ?: 1
         val heartbeat = child("lastHeartbeatTimestamp").getValue(Long::class.java) ?: System.currentTimeMillis()
+        val forfeited = child("forfeitedPlayerId").getValue(String::class.java)
 
         LobbyRoom(
             roomCode = code,
@@ -302,7 +358,8 @@ private fun DataSnapshot.toLobbyRoom(): LobbyRoom? {
             guestCommitmentHash = guestHash,
             currentTurnPlayerId = currentTurn,
             turnNumber = turnNum,
-            lastHeartbeatTimestamp = heartbeat
+            lastHeartbeatTimestamp = heartbeat,
+            forfeitedPlayerId = forfeited
         )
     } catch (_: Throwable) {
         null

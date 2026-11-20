@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.hexafleet.domain.game.ai.AiDifficulty
+import com.hexafleet.domain.game.multiplayer.RoomCodeGenerator
 import com.hexafleet.feature.board.audio.HexaFleetSoundManager
 import com.hexafleet.feature.board.model.GameCustomRules
 import com.hexafleet.feature.board.model.TacticalGameMode
@@ -129,9 +130,13 @@ class MainActivity : ComponentActivity() {
             // deepstrike://lobby/HX-7482 or hexafleet://lobby/HX-7482
             val pathSegment = data.lastPathSegment
             val queryCode = data.getQueryParameter("code")
-            val code = queryCode ?: pathSegment
-            if (!code.isNullOrBlank()) {
-                deepLinkRoomCode = code.uppercase()
+            val rawCode = queryCode ?: pathSegment
+            if (!rawCode.isNullOrBlank()) {
+                val candidateCode = rawCode.trim().uppercase()
+                // Güvenlik Sanitizasyonu: Yalnızca geçerli HX-XXXX formatındaki kodlar kabul edilir
+                if (RoomCodeGenerator.isValid(candidateCode)) {
+                    deepLinkRoomCode = candidateCode
+                }
             }
         }
     }

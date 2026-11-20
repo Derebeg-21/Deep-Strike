@@ -8,17 +8,39 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -75,7 +97,9 @@ fun HexBoardCanvas(
     onRotateShip: ((clockwise: Boolean) -> Unit)? = null,
     onDragHover: ((HexCoordinate) -> Unit)? = null,
     onDragRelease: ((HexCoordinate) -> Unit)? = null,
-    onRadialAction: ((coord: HexCoordinate, action: RadialActionType) -> Unit)? = null
+    onRadialAction: ((coord: HexCoordinate, action: RadialActionType) -> Unit)? = null,
+    enableZoomAndPan: Boolean = true,
+    enableMagnifier: Boolean = true
 ) {
     // Radar ve Nabız (Pulse) Animasyonları
     val infiniteTransition = rememberInfiniteTransition(label = "HexBoardAnimations")
@@ -85,6 +109,14 @@ fun HexBoardCanvas(
     var activeRadialHex by remember { mutableStateOf<HexCoordinate?>(null) }
     var activeRadialHoverAction by remember { mutableStateOf<RadialActionType?>(null) }
     var activeRadialDragDist by remember { mutableFloatStateOf(0f) }
+
+    // Pinch-to-Zoom (1.0x - 2.5x) & Pan Durumu
+    var zoomScale by remember(state.radius) { mutableFloatStateOf(1.0f) }
+    var panOffset by remember(state.radius) { mutableStateOf(Offset.Zero) }
+
+    // Taktiksel Hedef Büyüteci (Crosshair Magnifier) Durumu
+    var magnifierHex by remember { mutableStateOf<HexCoordinate?>(null) }
+    var magnifierScreenPos by remember { mutableStateOf<Offset?>(null) }
 
     val radarAngle by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -127,255 +159,580 @@ fun HexBoardCanvas(
         label = "StormWaveDrift"
     )
 
-    Canvas(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Transparent)
-            .pointerInput(state.radius, onRotateShip, state.previewShipParts, onDragHover, onDragRelease, onRadialAction) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val w = size.width.toFloat()
-                    val h = size.height.toFloat()
-                    val hexSize = calculateOptimalHexSize(w, h, state.radius)
-                    val layout = HexLayout(size = hexSize)
+    Box(modifier = modifier.fillMaxSize()) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Transparent)
+                .pointerInput(
+                    state.radius,
+                    onRotateShip,
+                    state.previewShipParts,
+                    onDragHover,
+                    onDragRelease,
+                    onRadialAction,
+                    enableZoomAndPan,
+                    enableMagnifier
+                ) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val w = size.width.toFloat()
+                        val h = size.height.toFloat()
+                        val baseHexSize = calculateOptimalHexSize(w, h, state.radius)
+                        val initialHexSize = baseHexSize * zoomScale
+                        val initialLayout = HexLayout(size = initialHexSize)
 
-                    val startWorldX = down.position.x - (w / 2f)
-                    val startWorldY = down.position.y - (h / 2f)
+                        val startWorldX = down.position.x - ((w / 2f) + panOffset.x)
+                        val startWorldY = down.position.y - ((h / 2f) + panOffset.y)
 
-                    // 1. Seçili gemi üstündeki 2 yönlü kırmızı döndürme butonlarına dokunma kontrolü
-                    if (onRotateShip != null && state.previewShipParts.isNotEmpty()) {
-                        val hudCenter = calculateShipHudCenter(state.previewShipParts, layout, hexSize, h)
-                        val btnOffset = hexSize * 0.90f
-                        val ccwCenter = Offset(hudCenter.x - btnOffset, hudCenter.y)
-                        val cwCenter = Offset(hudCenter.x + btnOffset, hudCenter.y)
-                        val hitRadius = (hexSize * 0.48f).coerceAtLeast(36f)
+                        // 1. Seçili gemi üstündeki 2 yönlü kırmızı döndürme butonlarına dokunma kontrolü
+                        if (onRotateShip != null && state.previewShipParts.isNotEmpty()) {
+                            val hudCenter = calculateShipHudCenter(state.previewShipParts, initialLayout, initialHexSize, h)
+                            val btnOffset = initialHexSize * 0.90f
+                            val ccwCenter = Offset(hudCenter.x - btnOffset, hudCenter.y)
+                            val cwCenter = Offset(hudCenter.x + btnOffset, hudCenter.y)
+                            val hitRadius = (initialHexSize * 0.48f).coerceAtLeast(36f)
 
-                        val dCcw = hypot(startWorldX - ccwCenter.x, startWorldY - ccwCenter.y)
-                        val dCw = hypot(startWorldX - cwCenter.x, startWorldY - cwCenter.y)
+                            val dCcw = hypot(startWorldX - ccwCenter.x, startWorldY - ccwCenter.y)
+                            val dCw = hypot(startWorldX - cwCenter.x, startWorldY - cwCenter.y)
 
-                        if (dCcw <= hitRadius) {
-                            onRotateShip(false) // Saatin tersine / Sola döndür
-                            down.consume()
-                            return@awaitEachGesture
-                        }
-                        if (dCw <= hitRadius) {
-                            onRotateShip(true) // Saat yönünde / Sağa döndür
-                            down.consume()
-                            return@awaitEachGesture
-                        }
-                    }
-
-                    val downHex = layout.pixelToHex(startWorldX, startWorldY)
-                    var isDrag = false
-                    var currentHex = downHex
-                    val touchSlop = 14f
-                    val startTime = System.currentTimeMillis()
-                    var isRadialActive = false
-
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-
-                        val dist = hypot(change.position.x - down.position.x, change.position.y - down.position.y)
-
-                        // Uzun basma kontrolü: Saldırı haritasındaysak 260ms sonra altıgen radyal HUD açılır!
-                        if (state.isAttackBoard && onRadialAction != null && !isRadialActive && !isDrag) {
-                            if (System.currentTimeMillis() - startTime >= 260L && downHex.distanceTo(HexCoordinate.ZERO) <= state.radius) {
-                                isRadialActive = true
-                                activeRadialHex = downHex
-                                activeRadialHoverAction = null
-                                activeRadialDragDist = 0f
+                            if (dCcw <= hitRadius) {
+                                onRotateShip(false) // Saatin tersine / Sola döndür
+                                down.consume()
+                                return@awaitEachGesture
+                            }
+                            if (dCw <= hitRadius) {
+                                onRotateShip(true) // Saat yönünde / Sağa döndür
+                                down.consume()
+                                return@awaitEachGesture
                             }
                         }
 
-                        if (!change.pressed) {
-                            // Parmak kaldırıldı (Release / Drop)
-                            if (isRadialActive) {
-                                val action = activeRadialHoverAction
-                                if (action != null && activeRadialDragDist >= hexSize * 0.35f) {
-                                    onRadialAction?.invoke(downHex, action)
+                        val downHex = initialLayout.pixelToHex(startWorldX, startWorldY)
+                        var isDrag = false
+                        var isMultiTouchZoom = false
+                        var currentHex = downHex
+                        val touchSlop = 14f
+                        val startTime = System.currentTimeMillis()
+                        var isRadialActive = false
+
+                        if (enableMagnifier && downHex.distanceTo(HexCoordinate.ZERO) <= state.radius) {
+                            magnifierHex = downHex
+                            magnifierScreenPos = down.position
+                        }
+
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val pressedChanges = event.changes.filter { it.pressed }
+
+                            // Çoklu Dokunuş (Pinch-to-Zoom 1.0x - 2.5x & Pan)
+                            if (enableZoomAndPan && pressedChanges.size >= 2) {
+                                isMultiTouchZoom = true
+                                isRadialActive = false
+                                activeRadialHex = null
+                                activeRadialHoverAction = null
+                                activeRadialDragDist = 0f
+                                magnifierHex = null
+                                magnifierScreenPos = null
+
+                                val zoomChange = event.calculateZoom()
+                                val panChange = event.calculatePan()
+                                val newScale = (zoomScale * zoomChange).coerceIn(1.0f, 2.5f)
+                                zoomScale = newScale
+                                panOffset = clampBoardPanOffset(panOffset + panChange, w, h, newScale)
+
+                                event.changes.forEach { it.consume() }
+                                continue
+                            }
+
+                            if (isMultiTouchZoom) {
+                                if (pressedChanges.isEmpty()) {
+                                    magnifierHex = null
+                                    magnifierScreenPos = null
+                                    break
+                                }
+                                event.changes.forEach { it.consume() }
+                                continue
+                            }
+
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                            if (change == null) {
+                                magnifierHex = null
+                                magnifierScreenPos = null
+                                break
+                            }
+
+                            val liveHexSize = baseHexSize * zoomScale
+                            val liveLayout = HexLayout(size = liveHexSize)
+                            val dist = hypot(change.position.x - down.position.x, change.position.y - down.position.y)
+
+                            // Uzun basma kontrolü: Saldırı haritasındaysak 260ms sonra altıgen radyal HUD açılır!
+                            if (state.isAttackBoard && onRadialAction != null && !isRadialActive && !isDrag) {
+                                if (System.currentTimeMillis() - startTime >= 260L && downHex.distanceTo(HexCoordinate.ZERO) <= state.radius) {
+                                    isRadialActive = true
+                                    activeRadialHex = downHex
+                                    activeRadialHoverAction = null
+                                    activeRadialDragDist = 0f
+                                    magnifierHex = null
+                                    magnifierScreenPos = null
+                                }
+                            }
+
+                            if (!change.pressed) {
+                                // Parmak kaldırıldı (Release / Drop)
+                                magnifierHex = null
+                                magnifierScreenPos = null
+
+                                if (isRadialActive) {
+                                    val action = activeRadialHoverAction
+                                    if (action != null && activeRadialDragDist >= liveHexSize * 0.35f) {
+                                        onRadialAction?.invoke(downHex, action)
+                                    } else {
+                                        if (downHex.distanceTo(HexCoordinate.ZERO) <= state.radius) {
+                                            onHexClicked(downHex)
+                                        }
+                                    }
+                                    activeRadialHex = null
+                                    activeRadialHoverAction = null
+                                    activeRadialDragDist = 0f
+                                    isRadialActive = false
+                                } else if (isDrag && onDragRelease != null) {
+                                    if (currentHex.distanceTo(HexCoordinate.ZERO) <= state.radius) {
+                                        onDragRelease(currentHex)
+                                    }
+                                } else if (isDrag && currentHex.distanceTo(HexCoordinate.ZERO) <= state.radius) {
+                                    // Büyüteç ile sürükleyerek hassas hedef seçimi
+                                    onHexClicked(currentHex)
                                 } else {
                                     if (downHex.distanceTo(HexCoordinate.ZERO) <= state.radius) {
                                         onHexClicked(downHex)
                                     }
                                 }
-                                activeRadialHex = null
-                                activeRadialHoverAction = null
-                                activeRadialDragDist = 0f
-                                isRadialActive = false
-                            } else if (isDrag && onDragRelease != null) {
-                                if (currentHex.distanceTo(HexCoordinate.ZERO) <= state.radius) {
-                                    onDragRelease(currentHex)
-                                }
-                            } else {
-                                if (downHex.distanceTo(HexCoordinate.ZERO) <= state.radius) {
-                                    onHexClicked(downHex)
-                                }
+                                change.consume()
+                                break
                             }
-                            change.consume()
-                            break
-                        }
 
-                        if (isRadialActive) {
-                            val dx = change.position.x - down.position.x
-                            val dy = change.position.y - down.position.y
-                            val currentDragDist = hypot(dx, dy)
-                            activeRadialDragDist = currentDragDist
+                            if (isRadialActive) {
+                                val dx = change.position.x - down.position.x
+                                val dy = change.position.y - down.position.y
+                                val currentDragDist = hypot(dx, dy)
+                                activeRadialDragDist = currentDragDist
 
-                            if (currentDragDist >= hexSize * 0.35f) {
-                                val angleDeg = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
-                                val selectedAction = when {
-                                    // Üst Bölge: -150° .. -30° -> ATEŞ ET (1 CP)
-                                    angleDeg in -150f..-30f -> RadialActionType.FIRE
-                                    // Sol Bölge: -150° .. -180° veya 90° .. 180° -> İHA (3 CP)
-                                    angleDeg < -150f || angleDeg > 90f -> RadialActionType.DRONE
-                                    // Sağ Bölge: -30° .. 90° -> KALKAN (2 CP)
-                                    else -> RadialActionType.SHIELD
+                                if (currentDragDist >= liveHexSize * 0.35f) {
+                                    val angleDeg = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+                                    val selectedAction = when {
+                                        // Üst Bölge: -150° .. -30° -> ATEŞ ET (1 CP)
+                                        angleDeg in -150f..-30f -> RadialActionType.FIRE
+                                        // Sol Bölge: -150° .. -180° veya 90° .. 180° -> İHA (3 CP)
+                                        angleDeg < -150f || angleDeg > 90f -> RadialActionType.DRONE
+                                        // Sağ Bölge: -30° .. 90° -> KALKAN (2 CP)
+                                        else -> RadialActionType.SHIELD
+                                    }
+                                    activeRadialHoverAction = selectedAction
+                                } else {
+                                    activeRadialHoverAction = null
                                 }
-                                activeRadialHoverAction = selectedAction
-                            } else {
-                                activeRadialHoverAction = null
-                            }
-                            change.consume()
-                        } else if (dist > touchSlop) {
-                            isDrag = true
-                            val worldX = change.position.x - (w / 2f)
-                            val worldY = change.position.y - (h / 2f)
-                            val hoverHex = layout.pixelToHex(worldX, worldY)
-                            if (hoverHex != currentHex) {
-                                currentHex = hoverHex
-                                if (hoverHex.distanceTo(HexCoordinate.ZERO) <= state.radius) {
-                                    onDragHover?.invoke(hoverHex)
+                                change.consume()
+                            } else if (dist > touchSlop) {
+                                isDrag = true
+                                val worldX = change.position.x - ((w / 2f) + panOffset.x)
+                                val worldY = change.position.y - ((h / 2f) + panOffset.y)
+                                val hoverHex = liveLayout.pixelToHex(worldX, worldY)
+                                if (enableMagnifier) {
+                                    magnifierScreenPos = change.position
+                                    if (hoverHex.distanceTo(HexCoordinate.ZERO) <= state.radius) {
+                                        magnifierHex = hoverHex
+                                    }
                                 }
+                                if (hoverHex != currentHex) {
+                                    currentHex = hoverHex
+                                    if (hoverHex.distanceTo(HexCoordinate.ZERO) <= state.radius) {
+                                        onDragHover?.invoke(hoverHex)
+                                    }
+                                }
+                                change.consume()
+                            } else if (enableMagnifier) {
+                                magnifierScreenPos = change.position
                             }
-                            change.consume()
                         }
                     }
                 }
-            }
-    ) {
-        val centerX = size.width / 2f
-        val centerY = size.height / 2f
-        val hexSize = calculateOptimalHexSize(size.width, size.height, state.radius)
-        val cache = HexPathCache(hexSize)
+        ) {
+            val baseHexSize = calculateOptimalHexSize(size.width, size.height, state.radius)
+            val hexSize = baseHexSize * zoomScale
+            val centerX = (size.width / 2f) + panOffset.x
+            val centerY = (size.height / 2f) + panOffset.y
+            val cache = HexPathCache.getOrCreate(hexSize)
 
-        // 0. KATMAN: Arka Plan Taktiksel Okyanus Dalgası İllüstrasyonu (User Requirement 1)
-        // Statik (animasyonsuz) ve kesinlikle üst başlık alanına taşmayacak şekilde tahta sınırları içine kırpılmış.
-        val waveBmp = shipBitmaps["board_ocean_waves"]
-        if (waveBmp != null) {
-            clipRect(left = 0f, top = 0f, right = size.width, bottom = size.height) {
-                val bmpW = waveBmp.width.toFloat()
-                val bmpH = waveBmp.height.toFloat()
-                val scale = max(size.width / bmpW, size.height / bmpH)
-                val scaledW = bmpW * scale
-                val scaledH = bmpH * scale
-                val offsetX = (size.width - scaledW) / 2f
-                val offsetY = (size.height - scaledH) / 2f
+            // 0. KATMAN: Arka Plan Taktiksel Okyanus Dalgası İllüstrasyonu (User Requirement 1)
+            // Statik (animasyonsuz) ve kesinlikle üst başlık alanına taşmayacak şekilde tahta sınırları içine kırpılmış.
+            val waveBmp = shipBitmaps["board_ocean_waves"]
+            if (waveBmp != null) {
+                clipRect(left = 0f, top = 0f, right = size.width, bottom = size.height) {
+                    val bmpW = waveBmp.width.toFloat()
+                    val bmpH = waveBmp.height.toFloat()
+                    val scale = max(size.width / bmpW, size.height / bmpH)
+                    val scaledW = bmpW * scale
+                    val scaledH = bmpH * scale
+                    val offsetX = (size.width - scaledW) / 2f
+                    val offsetY = (size.height - scaledH) / 2f
 
-                drawImage(
-                    image = waveBmp,
-                    dstOffset = IntOffset(offsetX.roundToInt(), offsetY.roundToInt()),
-                    dstSize = IntSize(scaledW.roundToInt(), scaledH.roundToInt()),
-                    alpha = 0.30f
-                )
-            }
-        }
-
-        translate(left = centerX, top = centerY) {
-            // 1. KATMAN: Altıgen Deniz Izgarası, Çevre Unsurları ve Sis Durumu
-            drawHexGridAndTerrain(
-                state = state,
-                cache = cache,
-                mountainBitmap = shipBitmaps["terrain_coral_reef"] ?: shipBitmaps["terrain_mountain"],
-                radioactiveBitmap = shipBitmaps["hazard_radioactive"],
-                stormBitmap = shipBitmaps["hazard_storm"],
-                pulseAlpha = pulseAlpha,
-                stormWaveAngle = stormWaveAngle
-            )
-
-            // 2. KATMAN: Zırhlı Savaş Gemisi Gövdeleri (Dost Filo veya Batırılmış Düşman Gemileri)
-            drawArmoredShips(state, cache, shipBitmaps, pulseAlpha)
-
-            // 2.5 KATMAN: Gemi Altındaki Radyoaktif Sis ve Manyetik Fırtına Flu Gösterimi (User Requirement 2 & 4)
-            if (!state.isAttackBoard) {
-                drawSubmergedShipHazardOverlays(
-                    state = state,
-                    cache = cache,
-                    radioactiveBitmap = shipBitmaps["hazard_radioactive"],
-                    stormBitmap = shipBitmaps["hazard_storm"],
-                    pulseAlpha = pulseAlpha,
-                    stormWaveAngle = stormWaveAngle
-                )
-            }
-
-            // 2.8 KATMAN: SADECE DOST HARİTADA: Düşman İHA Keşif Bölgeleri (Mor Flu Yapı & Canlı Animasyonlu Son İHA)
-            if (!state.isAttackBoard && state.enemyDroneScans.isNotEmpty()) {
-                drawEnemyDroneReconScans(
-                    scans = state.enemyDroneScans,
-                    latestSector = state.lastEnemyDroneSector,
-                    latestCenter = state.lastEnemyDroneCenter,
-                    cache = cache,
-                    pulseAlpha = pulseAlpha,
-                    radarAngle = radarAngle
-                )
-            }
-
-            // 3. KATMAN: SADECE DOST HARİTADA: Flu Estetik Kalkan Kubbeleri (Aegis Shield Domes)
-            if (!state.isAttackBoard) {
-                val domes = if (state.shieldDomes.isNotEmpty()) state.shieldDomes else listOfNotNull(state.shieldDome)
-                for (dome in domes) {
-                    drawShieldDome(dome, cache, pulseAlpha)
+                    drawImage(
+                        image = waveBmp,
+                        dstOffset = IntOffset(offsetX.roundToInt(), offsetY.roundToInt()),
+                        dstSize = IntSize(scaledW.roundToInt(), scaledH.roundToInt()),
+                        alpha = 0.30f
+                    )
                 }
             }
 
-            // 4. KATMAN: Gemi Yerleştirme Önizlemesi (Varsa)
-            if (state.previewShipParts.isNotEmpty()) {
-                drawShipPlacementPreview(state, cache, pulseAlpha, shipBitmaps)
-            }
+            clipRect(left = 0f, top = 0f, right = size.width, bottom = size.height) {
+                translate(left = centerX, top = centerY) {
+                    // 1. KATMAN: Altıgen Deniz Izgarası, Çevre Unsurları ve Sis Durumu
+                    drawHexGridAndTerrain(
+                        state = state,
+                        cache = cache,
+                        mountainBitmap = shipBitmaps["terrain_coral_reef"] ?: shipBitmaps["terrain_mountain"],
+                        radioactiveBitmap = shipBitmaps["hazard_radioactive"],
+                        stormBitmap = shipBitmaps["hazard_storm"],
+                        pulseAlpha = pulseAlpha,
+                        stormWaveAngle = stormWaveAngle
+                    )
 
-            // 4.5 KATMAN: Seçili Gemi Üzerinde Flu Taktiksel Çift Yönlü Döndürme HUD'ı (User Requirement 1)
-            if (onRotateShip != null && state.previewShipParts.isNotEmpty()) {
-                val hudCenter = calculateShipHudCenter(state.previewShipParts, cache.layout, hexSize, size.height)
-                drawShipRotationHud(
-                    hudCenter = hudCenter,
-                    hexSize = hexSize,
-                    pulseAlpha = pulseAlpha,
-                    arrowPhase = arrowPhase
+                    // 2. KATMAN: Zırhlı Savaş Gemisi Gövdeleri (Dost Filo veya Batırılmış Düşman Gemileri)
+                    drawArmoredShips(state, cache, shipBitmaps, pulseAlpha)
+
+                    // 2.5 KATMAN: Gemi Altındaki Radyoaktif Sis ve Manyetik Fırtına Flu Gösterimi (User Requirement 2 & 4)
+                    if (!state.isAttackBoard) {
+                        drawSubmergedShipHazardOverlays(
+                            state = state,
+                            cache = cache,
+                            radioactiveBitmap = shipBitmaps["hazard_radioactive"],
+                            stormBitmap = shipBitmaps["hazard_storm"],
+                            pulseAlpha = pulseAlpha,
+                            stormWaveAngle = stormWaveAngle
+                        )
+                    }
+
+                    // 2.8 KATMAN: SADECE DOST HARİTADA: Düşman İHA Keşif Bölgeleri (Mor Flu Yapı & Canlı Animasyonlu Son İHA)
+                    if (!state.isAttackBoard && state.enemyDroneScans.isNotEmpty()) {
+                        drawEnemyDroneReconScans(
+                            scans = state.enemyDroneScans,
+                            latestSector = state.lastEnemyDroneSector,
+                            latestCenter = state.lastEnemyDroneCenter,
+                            cache = cache,
+                            pulseAlpha = pulseAlpha,
+                            radarAngle = radarAngle
+                        )
+                    }
+
+                    // 3. KATMAN: SADECE DOST HARİTADA: Flu Estetik Kalkan Kubbeleri (Aegis Shield Domes)
+                    if (!state.isAttackBoard) {
+                        val domes = if (state.shieldDomes.isNotEmpty()) state.shieldDomes else listOfNotNull(state.shieldDome)
+                        for (dome in domes) {
+                            drawShieldDome(dome, cache, pulseAlpha)
+                        }
+                    }
+
+                    // 4. KATMAN: Gemi Yerleştirme Önizlemesi (Varsa)
+                    if (state.previewShipParts.isNotEmpty()) {
+                        drawShipPlacementPreview(state, cache, pulseAlpha, shipBitmaps)
+                    }
+
+                    // 4.5 KATMAN: Seçili Gemi Üzerinde Flu Taktiksel Çift Yönlü Döndürme HUD'ı (User Requirement 1)
+                    if (onRotateShip != null && state.previewShipParts.isNotEmpty()) {
+                        val hudCenter = calculateShipHudCenter(state.previewShipParts, cache.layout, hexSize, size.height)
+                        drawShipRotationHud(
+                            hudCenter = hudCenter,
+                            hexSize = hexSize,
+                            pulseAlpha = pulseAlpha,
+                            arrowPhase = arrowPhase
+                        )
+                    }
+
+                    // 5. KATMAN: Radar Süpürme Işını (Saldırı Haritasında)
+                    if (state.isRadarSweepActive) {
+                        val maxRadarRadius = (state.radius + 0.6f) * hexSize * 1.72f
+                        drawRadarSweep(maxRadarRadius, radarAngle)
+                    }
+
+                    // 6. KATMAN: Patlamalar (HIT), Su Sıçramaları (MISS), İHA Keşifleri, Kalkan Sönümlemeleri ve Sabit Hedefleme İmleci
+                    drawCombatMarkersAndReticle(state, cache, pulseAlpha)
+
+                    // 7. KATMAN: Gemiye Özel Taktiksel Taarruz Önizlemesi (Delta EMP Şoku veya Amiral 5'li Bombardıman)
+                    if (state.previewSpecialHexes.isNotEmpty()) {
+                        drawSpecialActionPreview(
+                            specialHexes = state.previewSpecialHexes,
+                            specialMode = state.specialMode,
+                            cache = cache,
+                            pulseAlpha = pulseAlpha
+                        )
+                    }
+
+                    // 8. KATMAN: Altıgen Radyal Menü (Radial HUD Wheel - User Requirement C)
+                    if (activeRadialHex != null) {
+                        drawRadialHudWheel(
+                            centerHex = activeRadialHex!!,
+                            layout = cache.layout,
+                            hexSize = hexSize,
+                            hoveredAction = activeRadialHoverAction,
+                            dragDist = activeRadialDragDist,
+                            pulseAlpha = pulseAlpha
+                        )
+                    }
+                }
+
+                // 9. KATMAN: TAKTİKSEL HEDEF BÜYÜTECİ (Crosshair Magnifier HUD - Parmağın 45dp Üzerinde)
+                if (enableMagnifier && magnifierHex != null && magnifierScreenPos != null && activeRadialHex == null) {
+                    val mHex = magnifierHex!!
+                    val hexLocalCenter = cache.layout.hexToPixel(mHex)
+                    val hexScreenCenter = Offset(centerX + hexLocalCenter.x, centerY + hexLocalCenter.y)
+                    drawTacticalCrosshairMagnifier(
+                        hex = mHex,
+                        tile = state.tiles[mHex],
+                        isAttackBoard = state.isAttackBoard,
+                        touchPos = magnifierScreenPos!!,
+                        hexScreenCenter = hexScreenCenter,
+                        pulseAlpha = pulseAlpha,
+                        targetBitmap = shipBitmaps["ic_target_3d"]
+                    )
+                }
+            }
+        }
+
+        // 10. KATMAN: Sağ Alt / Sol Alt Kompakt Taktiksel Zoom Kontrol Rozeti (Pinch-to-Zoom & Tek El Yakınlaştırma)
+        if (enableZoomAndPan) {
+            TacticalZoomControlPill(
+                zoomScale = zoomScale,
+                onZoomIn = {
+                    val next = (zoomScale + 0.35f).coerceAtMost(2.5f)
+                    zoomScale = next
+                },
+                onZoomOut = {
+                    val next = (zoomScale - 0.35f).coerceAtLeast(1.0f)
+                    zoomScale = next
+                    if (next <= 1.01f) panOffset = Offset.Zero
+                },
+                onResetZoom = {
+                    zoomScale = 1.0f
+                    panOffset = Offset.Zero
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 6.dp, bottom = 6.dp)
+            )
+        }
+    }
+}
+
+private fun clampBoardPanOffset(rawPan: Offset, canvasW: Float, canvasH: Float, scale: Float): Offset {
+    if (scale <= 1.01f) return Offset.Zero
+    val maxPanX = (canvasW * (scale - 1f) * 0.55f).coerceAtLeast(0f)
+    val maxPanY = (canvasH * (scale - 1f) * 0.55f).coerceAtLeast(0f)
+    return Offset(
+        x = rawPan.x.coerceIn(-maxPanX, maxPanX),
+        y = rawPan.y.coerceIn(-maxPanY, maxPanY)
+    )
+}
+
+/**
+ * Tek el veya çift parmak (Pinch) ile yakınlaştırılan haritayı yöneten kompakt HUD kontrolü.
+ */
+@Composable
+private fun TacticalZoomControlPill(
+    zoomScale: Float,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    onResetZoom: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isZoomed = zoomScale > 1.04f
+    Surface(
+        modifier = modifier,
+        color = Color(0xE60F172A),
+        shape = RoundedCornerShape(10.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            0.9.dp,
+            if (isZoomed) Color(0xFF38BDF8) else Color(0xFF334155)
+        ),
+        shadowElevation = 2.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(if (isZoomed) Color(0xFF1E293B) else Color.Transparent)
+                    .clickable(enabled = isZoomed, onClick = onZoomOut),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "−",
+                    color = if (isZoomed) Color.White else Color(0xFF64748B),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Black,
+                    fontFamily = FontFamily.Monospace
                 )
             }
 
-            // 5. KATMAN: Radar Süpürme Işını (Saldırı Haritasında)
-            if (state.isRadarSweepActive) {
-                val maxRadarRadius = (state.radius + 0.6f) * hexSize * 1.72f
-                drawRadarSweep(maxRadarRadius, radarAngle)
-            }
+            Text(
+                text = String.format(java.util.Locale.US, "%.1fx", zoomScale),
+                color = if (isZoomed) Color(0xFF38BDF8) else Color(0xFFE2E8F0),
+                fontSize = 8.5.sp,
+                fontWeight = FontWeight.ExtraBold,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .clickable(enabled = isZoomed, onClick = onResetZoom)
+                    .padding(horizontal = 3.dp, vertical = 1.dp)
+            )
 
-            // 6. KATMAN: Patlamalar (HIT), Su Sıçramaları (MISS), İHA Keşifleri, Kalkan Sönümlemeleri ve Sabit Hedefleme İmleci
-            drawCombatMarkersAndReticle(state, cache, pulseAlpha)
-
-            // 7. KATMAN: Gemiye Özel Taktiksel Taarruz Önizlemesi (Delta EMP Şoku veya Amiral 5'li Bombardıman)
-            if (state.previewSpecialHexes.isNotEmpty()) {
-                drawSpecialActionPreview(
-                    specialHexes = state.previewSpecialHexes,
-                    specialMode = state.specialMode,
-                    cache = cache,
-                    pulseAlpha = pulseAlpha
-                )
-            }
-
-            // 8. KATMAN: Altıgen Radyal Menü (Radial HUD Wheel - User Requirement C)
-            if (activeRadialHex != null) {
-                drawRadialHudWheel(
-                    centerHex = activeRadialHex!!,
-                    layout = cache.layout,
-                    hexSize = hexSize,
-                    hoveredAction = activeRadialHoverAction,
-                    dragDist = activeRadialDragDist,
-                    pulseAlpha = pulseAlpha
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(if (zoomScale < 2.45f) Color(0xFF1E293B) else Color.Transparent)
+                    .clickable(enabled = zoomScale < 2.45f, onClick = onZoomIn),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "+",
+                    color = if (zoomScale < 2.45f) Color.White else Color(0xFF64748B),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Black,
+                    fontFamily = FontFamily.Monospace
                 )
             }
         }
     }
+}
+
+/**
+ * Küçük ekranlarda oyuncunun parmağı peteğin üzerini kapattığında, parmağın ~45dp üzerinde
+ * yüzen yüksek kontrastlı Taktik Hedef Büyüteci (Crosshair Magnifier HUD) çizer.
+ */
+private fun DrawScope.drawTacticalCrosshairMagnifier(
+    hex: HexCoordinate,
+    tile: HexTileUiModel?,
+    isAttackBoard: Boolean,
+    touchPos: Offset,
+    hexScreenCenter: Offset,
+    pulseAlpha: Float,
+    targetBitmap: ImageBitmap? = null
+) {
+    val d = density
+    val badgeW = 148f * d
+    val badgeH = 44f * d
+    val liftY = 58f * d
+
+    // Parmağın üstünde yer yoksa (üst kenara çok yakınsa) parmağın altına konumlandır
+    val rawCenterY = if (touchPos.y - liftY - (badgeH / 2f) > 8f * d) {
+        touchPos.y - liftY
+    } else {
+        touchPos.y + liftY
+    }
+    val centerX = touchPos.x.coerceIn((badgeW / 2f) + 6f * d, size.width - (badgeW / 2f) - 6f * d)
+    val centerY = rawCenterY.coerceIn((badgeH / 2f) + 6f * d, size.height - (badgeH / 2f) - 6f * d)
+
+    val accentColor = if (isAttackBoard) Color(0xFFF43F5E) else Color(0xFF38BDF8)
+
+    // 1. Seçilen petek merkezinden büyüteç balonuna taktik lazer kılavuz çizgisi
+    drawLine(
+        color = accentColor.copy(alpha = 0.65f * pulseAlpha),
+        start = hexScreenCenter,
+        end = Offset(centerX, centerY),
+        strokeWidth = 1.6f * d
+    )
+    drawCircle(
+        color = accentColor.copy(alpha = 0.30f),
+        radius = 12f * d,
+        center = hexScreenCenter
+    )
+    drawCircle(
+        color = Color.White,
+        radius = 3.2f * d,
+        center = hexScreenCenter
+    )
+
+    // 2. Yüzen HUD Büyüteç Kapsülü
+    val topLeft = Offset(centerX - badgeW / 2f, centerY - badgeH / 2f)
+    drawRoundRect(
+        color = Color(0xF20F172A),
+        topLeft = topLeft,
+        size = Size(badgeW, badgeH),
+        cornerRadius = CornerRadius(11f * d, 11f * d)
+    )
+    drawRoundRect(
+        color = accentColor.copy(alpha = 0.90f),
+        topLeft = topLeft,
+        size = Size(badgeW, badgeH),
+        cornerRadius = CornerRadius(11f * d, 11f * d),
+        style = Stroke(width = 1.6f * d)
+    )
+
+    // 3. Sol Mini 3D Target PNG veya Reticle Sembolü
+    val reticleCx = topLeft.x + 21f * d
+    val reticleCy = centerY
+    val reticleR = 11.5f * d
+    if (targetBitmap != null) {
+        val iconPx = (reticleR * 2f).roundToInt()
+        drawImage(
+            image = targetBitmap,
+            dstOffset = IntOffset((reticleCx - reticleR).roundToInt(), (reticleCy - reticleR).roundToInt()),
+            dstSize = IntSize(iconPx, iconPx)
+        )
+    } else {
+        drawCircle(
+            color = accentColor.copy(alpha = 0.22f),
+            radius = reticleR,
+            center = Offset(reticleCx, reticleCy)
+        )
+        drawCircle(
+            color = accentColor,
+            radius = reticleR,
+            center = Offset(reticleCx, reticleCy),
+            style = Stroke(width = 1.4f * d)
+        )
+    }
+
+    // 4. Koordinat ve Sektör Durumu Metni
+    val statusText = when {
+        tile == null -> "SEKTÖR HAZIR"
+        tile.highlight == TileHighlightState.HIT || tile.highlight == TileHighlightState.SUNK_SHIP -> "💥 İSABET ALMIŞ"
+        tile.highlight == TileHighlightState.MISS -> "🌊 KARAVANA"
+        tile.highlight == TileHighlightState.SHIELD_ABSORBED -> "🛡️ KALKAN KORUMALI"
+        tile.highlight == TileHighlightState.RECON_DETECTED -> "📡 İHA: GEMİ TESPİT"
+        tile.highlight == TileHighlightState.RECON_CLEAR -> "📡 İHA: TEMİZ SEKTÖR"
+        tile.terrain == TerrainType.CORAL_REEF -> "🪸 MERCAN RESİFİ"
+        tile.terrain == TerrainType.MAGNETIC_STORM && !isAttackBoard -> "⚡ MANYETİK FIRTINA"
+        tile.shipPartName != null && !isAttackBoard -> "⚓ DOST FİLO GEMİSİ"
+        isAttackBoard -> "ATIŞA HAZIR"
+        else -> "🛡️ SAVUNMA SEKTÖRÜ"
+    }
+
+    val nativeCanvas = drawContext.canvas.nativeCanvas
+    val coordPaint = android.graphics.Paint().apply {
+        isAntiAlias = true
+        textAlign = android.graphics.Paint.Align.LEFT
+        textSize = 11.5f * d
+        color = android.graphics.Color.WHITE
+        typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+    }
+    val subPaint = android.graphics.Paint().apply {
+        isAntiAlias = true
+        textAlign = android.graphics.Paint.Align.LEFT
+        textSize = 8.8f * d
+        color = if (isAttackBoard) android.graphics.Color.parseColor("#FDA4AF") else android.graphics.Color.parseColor("#7DD3FC")
+        typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+    }
+
+    val textStartX = topLeft.x + 39f * d
+    nativeCanvas.drawText("Q:${hex.q} , R:${hex.r}", textStartX, centerY - 3.5f * d, coordPaint)
+    nativeCanvas.drawText(statusText, textStartX, centerY + 11.5f * d, subPaint)
 }
 
 /**

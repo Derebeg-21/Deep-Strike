@@ -100,6 +100,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.hexafleet.feature.board.settings.HexaFleetSettings
 import com.hexafleet.feature.board.theme.BoardColors
+import com.hexafleet.feature.board.ui.adaptive.currentHexaFleetLayoutInfo
 import kotlin.math.roundToInt
 
 /**
@@ -171,7 +172,7 @@ fun HexaFleetTopActions(
     onOpenSettings: () -> Unit,
     onOpenExit: () -> Unit,
     modifier: Modifier = Modifier,
-    isTablet: Boolean = (LocalConfiguration.current.screenWidthDp >= 600),
+    isTablet: Boolean = currentHexaFleetLayoutInfo().isTabletOrExpanded,
     onOpenBadges: (() -> Unit)? = null
 ) {
     val buttonSize = if (isTablet) 29.dp else 23.dp
@@ -266,7 +267,7 @@ fun HexaFleetInfoDialog(
     var selectedInfoTab by remember { mutableIntStateOf(0) }
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
-    val isTablet = screenWidthDp >= 600
+    val isTablet = currentHexaFleetLayoutInfo().isTabletOrExpanded
     val dialogWidth = when {
         screenWidthDp >= 840 -> 540.dp
         screenWidthDp >= 600 -> 490.dp
@@ -656,10 +657,11 @@ private fun FleetAndAbilitiesSection() {
         )
 
         InfoCard(
-            title = "🎯 Top Atışı (1 CP) — Standart Taarruz",
+            title = "Top Atışı (1 CP) — Standart Taarruz",
             description = "Seçilen tek bir altıgen peteğe top mermisi ateşlenir.\n• İsabet (HIT): Düşman gemisi vurulur ve patlar.\n• Karavana (Null): Mermi denize düşer, haritada 'Null' su sıçraması izi kalır.\n• Kalkan Soğurması: Hedefte düşman kalkanı varsa mermi tamamen havada emilir, altındaki gemi hasar almaz (gemi olup olmadığı gizli kalır) ve 7 peteklik kalkan kubbesi çöker!",
             icon = Icons.Default.GpsFixed,
-            iconTint = BoardColors.CrimsonRed
+            iconTint = BoardColors.CrimsonRed,
+            imageRes = R.drawable.ic_target_3d
         )
 
         InfoCard(
@@ -701,10 +703,11 @@ private fun ModesAndAiSection() {
             iconTint = BoardColors.TextSecondary
         )
         InfoCard(
-            title = "🎯 Kıdemli Taktikçi (Orta AI)",
+            title = "Kıdemli Taktikçi (Orta AI)",
             description = "6 eksenli Olasılık Yoğunluk Haritası (H-PDF) ve parite avlanma sistemini uygular. Bir isabet aldığında gemiyi batırana dek takip eder.",
             icon = Icons.Default.Radar,
-            iconTint = BoardColors.PurplePrimary
+            iconTint = BoardColors.PurplePrimary,
+            imageRes = R.drawable.ic_target_3d
         )
         InfoCard(
             title = "👑 Büyük Amiral (Uzman AI)",
@@ -723,7 +726,7 @@ private fun ModesAndAiSection() {
 private fun ContactSection() {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
-    val isTablet = LocalConfiguration.current.screenWidthDp >= 600
+    val isTablet = currentHexaFleetLayoutInfo().isTabletOrExpanded
     var isCopied by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -885,7 +888,7 @@ private fun InfoCard(
     iconTint: Color = BoardColors.PurplePrimary,
     imageRes: Int? = null
 ) {
-    val isTablet = LocalConfiguration.current.screenWidthDp >= 600
+    val isTablet = currentHexaFleetLayoutInfo().isTabletOrExpanded
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = BoardColors.SurfaceSubtle,
@@ -1608,7 +1611,7 @@ fun DeployableObjectInfoDialog(
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
     val screenHeightDp = configuration.screenHeightDp
-    val isTablet = screenWidthDp >= 600
+    val isTablet = currentHexaFleetLayoutInfo().isTabletOrExpanded
 
     val dialogWidth = when {
         screenWidthDp >= 840 -> 520.dp
@@ -1679,20 +1682,31 @@ fun DeployableObjectInfoDialog(
                             }
                         }
 
-                        Column {
+                        val titleFontSize = when {
+                            isTablet -> 14.sp
+                            info.title.length >= 22 -> 11.4.sp
+                            info.title.length >= 18 -> 12.2.sp
+                            else -> 13.sp
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = info.title,
                                 color = BoardColors.NavyDark,
-                                fontSize = 14.sp,
+                                fontSize = titleFontSize,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontFamily = FontFamily.Monospace,
-                                maxLines = 1
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = info.subtitle,
                                 color = BoardColors.TextSecondary,
-                                fontSize = 9.5.sp,
-                                maxLines = 1
+                                fontSize = if (isTablet) 9.8.sp else 9.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -1745,15 +1759,26 @@ fun DeployableObjectInfoDialog(
                             shape = RoundedCornerShape(6.dp),
                             border = androidx.compose.foundation.BorderStroke(0.8.dp, BoardColors.BorderSubtle)
                         ) {
-                            Text(
-                                text = "📐 ${info.sizeText}",
-                                color = BoardColors.NavyDark,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                softWrap = false,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Sensors,
+                                    contentDescription = null,
+                                    tint = info.accentColor,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = info.sizeText,
+                                    color = BoardColors.NavyDark,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
                         }
                     }
                 } else {
@@ -1790,9 +1815,11 @@ fun DeployableObjectInfoDialog(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text(
-                                    text = "📐",
-                                    fontSize = 9.sp
+                                Icon(
+                                    imageVector = Icons.Default.Sensors,
+                                    contentDescription = null,
+                                    tint = info.accentColor,
+                                    modifier = Modifier.size(11.dp)
                                 )
                                 Text(
                                     text = "GÖVDE: ${info.sizeText}",
@@ -1809,7 +1836,7 @@ fun DeployableObjectInfoDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // 3. KAYDIRILABİLİR İÇERİK KARTLARI (Tüm ekran boyutlarında sorunsuz kayar ve okunur)
+                // 3. KAYDIRILABİLİR İÇERİK KARTLARI (Modernize Edilmiş M3 İkon Rozetleri)
                 Column(
                     modifier = Modifier
                         .weight(1f, fill = false)
@@ -1824,14 +1851,30 @@ fun DeployableObjectInfoDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Text("ℹ️", fontSize = 11.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(RoundedCornerShape(5.dp))
+                                        .background(info.accentColor.copy(alpha = 0.14f))
+                                        .border(0.7.dp, info.accentColor.copy(alpha = 0.35f), RoundedCornerShape(5.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Radar,
+                                        contentDescription = null,
+                                        tint = info.accentColor,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
                                 Text(
                                     text = "GENEL TANIM VE GÖVDE MEKANİĞİ",
                                     color = BoardColors.NavyDark,
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontFamily = FontFamily.Monospace
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                             Text(
@@ -1843,7 +1886,7 @@ fun DeployableObjectInfoDialog(
                         }
                     }
 
-                    // B. Taktiksel Yetenek ve Muharebe Etkisi
+                    // B. Taktiksel Yetenek ve Muharebe Etkisi (3D Target İkonlu)
                     Surface(
                         color = info.accentColor.copy(alpha = 0.05f),
                         shape = RoundedCornerShape(10.dp),
@@ -1851,14 +1894,30 @@ fun DeployableObjectInfoDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Text("⚔️", fontSize = 11.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(RoundedCornerShape(5.dp))
+                                        .background(info.accentColor.copy(alpha = 0.14f))
+                                        .border(0.7.dp, info.accentColor.copy(alpha = 0.35f), RoundedCornerShape(5.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Image(
+                                        painter = painterResource(R.drawable.ic_target_3d),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(13.dp),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                }
                                 Text(
                                     text = "TAKTİKSEL YETENEK & MUHAREBE ETKİSİ",
                                     color = info.accentColor,
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontFamily = FontFamily.Monospace
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                             Text(
@@ -1870,7 +1929,8 @@ fun DeployableObjectInfoDialog(
                         }
                     }
 
-                    // C. Konuşlandırma ve Tersane Stratejisi İpucu
+                    // C. Konuşlandırma ve Tersane Stratejisi İpucu (Modern Taktik Kalkan Rozeti)
+                    val goldAccent = Color(0xFFD97706)
                     Surface(
                         color = Color(0xFFFEF3C7).copy(alpha = 0.60f),
                         shape = RoundedCornerShape(10.dp),
@@ -1878,14 +1938,30 @@ fun DeployableObjectInfoDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Text("💡", fontSize = 11.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(RoundedCornerShape(5.dp))
+                                        .background(Color(0xFFF59E0B).copy(alpha = 0.18f))
+                                        .border(0.7.dp, goldAccent.copy(alpha = 0.45f), RoundedCornerShape(5.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Shield,
+                                        contentDescription = null,
+                                        tint = goldAccent,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
                                 Text(
                                     text = "KONUŞLANDIRMA & GİZLENME İPUCU",
                                     color = Color(0xFFB45309),
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontFamily = FontFamily.Monospace
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                             Text(
@@ -2147,7 +2223,7 @@ fun HexaFleetAchievementsDialog(
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
     val screenHeightDp = configuration.screenHeightDp
-    val isTablet = screenWidthDp >= 600
+    val isTablet = currentHexaFleetLayoutInfo().isTabletOrExpanded
 
     val dialogWidth = when {
         screenWidthDp >= 840 -> 540.dp
@@ -2372,20 +2448,42 @@ fun HexaFleetAchievementsDialog(
                             }
                         }
 
-                        Text(
-                            text = "🎯 Görev: ${activeInspectedBadge.howToEarn}",
-                            color = BoardColors.NavyDark,
-                            fontSize = if (isTablet) 10.sp else 9.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            lineHeight = 13.5.sp
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Image(
+                                painter = painterResource(R.drawable.ic_target_3d),
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                            Text(
+                                text = "Görev: ${activeInspectedBadge.howToEarn}",
+                                color = BoardColors.NavyDark,
+                                fontSize = if (isTablet) 10.sp else 9.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                lineHeight = 13.5.sp
+                            )
+                        }
 
-                        Text(
-                            text = "💡 Taktik İpucu: ${activeInspectedBadge.tacticalTip}",
-                            color = BoardColors.TextSecondary,
-                            fontSize = if (isTablet) 9.5.sp else 8.5.sp,
-                            lineHeight = 13.sp
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Shield,
+                                contentDescription = null,
+                                tint = Color(0xFFD97706),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "Taktik İpucu: ${activeInspectedBadge.tacticalTip}",
+                                color = BoardColors.TextSecondary,
+                                fontSize = if (isTablet) 9.5.sp else 8.5.sp,
+                                lineHeight = 13.sp
+                            )
+                        }
                     }
                 }
 

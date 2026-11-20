@@ -68,3 +68,11 @@
 # -------------------------------------------------------------------
 -keep class androidx.compose.ui.** { *; }
 -dontwarn androidx.compose.**
+
+# -------------------------------------------------------------------
+# HexaFleet AI & Anti-Cheat Heuristic Engine (Obfuscation & Optimization)
+# -------------------------------------------------------------------
+# Yapay zeka taktiksel H-PDF matrisleri ve olasılık hesaplayıcıları karartılır (obfuscated)
+-repackageclasses 'com.hexafleet.internal'
+-allowaccessmodification
+-dontwarn com.hexafleet.domain.game.ai.**

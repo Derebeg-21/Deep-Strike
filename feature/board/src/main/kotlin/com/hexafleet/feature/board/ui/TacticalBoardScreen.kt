@@ -14,15 +14,23 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.runtime.CompositionLocalProvider
+import com.hexafleet.feature.board.ui.adaptive.DevicePosture
+import com.hexafleet.feature.board.ui.adaptive.HexaFleetLayoutInfo
+import com.hexafleet.feature.board.ui.adaptive.LocalHexaFleetLayout
+import com.hexafleet.feature.board.ui.adaptive.currentHexaFleetLayoutInfo
+import com.hexafleet.feature.board.ui.adaptive.rememberHexaFleetLayoutInfo
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -54,7 +62,10 @@ import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.runtime.derivedStateOf
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -117,7 +128,6 @@ import com.hexafleet.feature.board.ui.dialogs.HexaFleetTopActions
 import com.hexafleet.feature.board.ui.dialogs.getDeployableObjectAccent
 import com.hexafleet.feature.board.ui.dialogs.getDeployableObjectInfo
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 /**
@@ -1535,186 +1545,206 @@ fun TacticalBoardScreen(
         )
     }
 
-    // ==================== EKRAN BOYUTUNA GÖRE UYARLANABİLİR (SAĞ-SOL / ALT-ÜST) ARAYÜZ ====================
+    // ==================== EKRAN BOYUTUNA GÖRE UYARLANABİLİR (WINDOW SIZE CLASSES / POSTURE) ARAYÜZ ====================
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(BoardColors.LightBackground)
+            .displayCutoutPadding()
     ) {
-        val isWideLayout = maxWidth >= 640.dp || maxWidth > maxHeight
+        val layoutInfo = rememberHexaFleetLayoutInfo(maxWidth, maxHeight)
+        val isWideLayout = layoutInfo.useDualBoardSideBySide
+        val isCockpitCombatMode = layoutInfo.useSideRailCockpitCombat && battleState.phase == BattlePhase.COMBAT
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            // 1. ÜST KOMUTA ÇUBUĞU (Top Command Header)
-            CompactBattleHeader(
-                battleState = battleState,
-                gameMode = gameMode,
-                isAiThinking = isAiTurnInProgress,
-                remainingTurnSeconds = remainingTurnSeconds,
-                onBack = { showExitConfirmationDialog = true },
-                onOpenInfo = { showInfoDialog = true },
-                onOpenSettings = { showSettingsDialog = true },
-                onOpenExit = { showExitDialog = true }
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // 2. CANLI DURUM & BİLDİRİM BANDI (Status Banner)
-            TacticalBannerStrip(
-                message = battleState.lastBannerMessage,
-                isAlert = battleState.lastBannerMessage.contains("⚠️") ||
-                    battleState.lastBannerMessage.contains("🚨") ||
-                    battleState.lastBannerMessage.contains("💥") ||
-                    battleState.lastBannerMessage.contains("⏱️"),
-                isAiThinking = isAiTurnInProgress,
-                isPlayerTurn = battleState.isPlayerTurn,
-                turnNumber = battleState.turnNumber,
-                remainingTurnSeconds = remainingTurnSeconds,
-                phase = battleState.phase
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 3. ANA GÖVDE: GEMİ YERLEŞTİRME VEYA İKİ HARİTALI MUHAREBE
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                if (battleState.phase == BattlePhase.DEPLOYMENT) {
-                    FleetDeploymentWorkspace(
-                        battleState = battleState,
-                        isWideLayout = isWideLayout,
-                        onSelectShip = { shipId ->
-                            val s = battleState.friendlyShips.firstOrNull { it.id == shipId }
-                            battleState = battleState.copy(
-                                selectedDeploymentCategory = "SHIP",
-                                selectedDeploymentShipId = shipId,
-                                deploymentDirectionIndex = s?.directionIndex ?: battleState.deploymentDirectionIndex
-                            )
-                        },
-                        onSelectRadioactiveZone = { radIdx ->
-                            val rz = battleState.friendlyRadioactiveZones.getOrNull(radIdx)
-                            battleState = battleState.copy(
-                                selectedDeploymentCategory = "RADIOACTIVE",
-                                selectedDeploymentRadioactiveIndex = radIdx,
-                                deploymentDirectionIndex = rz?.directionIndex ?: battleState.deploymentDirectionIndex
-                            )
-                        },
-                        onHexClicked = ::onDeploymentHexClicked,
-                        onRotate = ::onRotateSelectedShip,
-                        onRotateBiDirectional = ::onRotateSelectedShip,
-                        onRandomize = ::onRandomizeFleet,
-                        onStartCombat = {
-                            haptics.playButtonClick()
-                            soundManager.playCannonFire()
-                            battleState = battleState.copy(
-                                phase = BattlePhase.COMBAT,
-                                lastBannerMessage = "⚔️ MUHAREBE BAŞLADI! Hedefe dokunup ateş edin"
-                            )
-                        },
-                        onShowDeployableInfo = { selectedDeployableObjectInfo = it }
+        CompositionLocalProvider(LocalHexaFleetLayout provides layoutInfo) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .padding(
+                        horizontal = if (layoutInfo.isCompactLandscape) 8.dp else 12.dp,
+                        vertical = if (layoutInfo.isCompactLandscape) 4.dp else 6.dp
                     )
-                } else {
-                    DualBoardCombatWorkspace(
+            ) {
+                // Yatay Telefon (COMPACT_LANDSCAPE) Muharebe modunda üst başlık ve banner Yan Ray (Side Rail) içine taşınır;
+                // böylece haritalar ekranın tüm dikey yüksekliğini (%100) kullanır!
+                if (!isCockpitCombatMode) {
+                    // 1. ÜST KOMUTA ÇUBUĞU (Top Command Header)
+                    CompactBattleHeader(
                         battleState = battleState,
-                        isWideLayout = isWideLayout,
+                        gameMode = gameMode,
                         isAiThinking = isAiTurnInProgress,
-                        onEnemyHexClicked = { clickedHex ->
-                            haptics.playSonarTick()
-                            soundManager.playRadarPing()
-                            when (battleState.activeSpecialMode) {
-                                SpecialActionMode.EMP_STRIKE -> {
-                                    if (battleState.selectedAttackCoord == clickedHex) {
-                                        onPlayerFireEmp(clickedHex)
-                                    } else {
-                                        battleState = battleState.copy(
-                                            selectedAttackCoord = clickedHex,
-                                            selectedTargetCoord = clickedHex,
-                                            lastBannerMessage = "⚡ EMP HEDEFİ: (${clickedHex.q}, ${clickedHex.r}) — Vurmak için dokunun"
-                                        )
-                                    }
-                                }
-                                SpecialActionMode.LINE_BARRAGE -> {
-                                    if (battleState.selectedAttackCoord == clickedHex) {
-                                        onPlayerFireLineBarrage(clickedHex)
-                                    } else {
-                                        battleState = battleState.copy(
-                                            selectedAttackCoord = clickedHex,
-                                            selectedTargetCoord = clickedHex,
-                                            lastBannerMessage = "💥 BOMBARDIMAN: (${clickedHex.q}, ${clickedHex.r}) — Vurmak için dokunun"
-                                        )
-                                    }
-                                }
-                                else -> {
-                                    if (battleState.selectedAttackCoord == clickedHex &&
-                                        clickedHex !in battleState.playerShotsOnEnemy.keys
-                                    ) {
-                                        // Aynı peteğe ikinci kez dokunulduğunda hızlı ateş et!
-                                        onPlayerFireAt(clickedHex)
-                                    } else {
-                                        battleState = battleState.copy(
-                                            selectedAttackCoord = clickedHex,
-                                            selectedTargetCoord = clickedHex,
-                                            selectedShieldCoord = null,
-                                            lastBannerMessage = "🎯 HEDEF: (${clickedHex.q}, ${clickedHex.r}) — Ateş için dokunun"
-                                        )
-                                    }
-                                }
-                            }
-                        },
-                        onFriendlyHexClicked = { clickedHex ->
-                            haptics.playSonarTick()
-                            battleState = battleState.copy(
-                                selectedShieldCoord = clickedHex,
-                                lastBannerMessage = "🛡️ KALKAN: (${clickedHex.q}, ${clickedHex.r}) — Kurmak için butona dokunun"
-                            )
-                        },
-                        onRadialAction = { coord, actionType ->
-                            when (actionType) {
-                                RadialActionType.FIRE -> onPlayerFireAt(coord)
-                                RadialActionType.DRONE -> {
-                                    val isCarrierAlive = battleState.friendlyShips.any { it.id.contains("carrier") && !it.isSunk }
-                                    if (!isCarrierAlive) {
-                                        haptics.playButtonClick()
-                                        battleState = battleState.copy(
-                                            lastBannerMessage = "⚠️ İHA Taşıyıcı battı, keşif devre dışı!"
-                                        )
-                                    } else {
-                                        onPlayerDroneScan(coord)
-                                    }
-                                }
-                                RadialActionType.SHIELD -> {
-                                    battleState = battleState.copy(selectedShieldCoord = coord)
-                                    onPlayerActivateShield()
-                                }
-                            }
-                        },
-                        onToggleEmp = ::onToggleEmp,
-                        onToggleBarrage = ::onToggleBarrage,
-                        onCycleBarrageDir = ::onCycleBarrageDir,
-                        onFire = {
-                            battleState.selectedAttackCoord?.let { coord ->
-                                when (battleState.activeSpecialMode) {
-                                    SpecialActionMode.EMP_STRIKE -> onPlayerFireEmp(coord)
-                                    SpecialActionMode.LINE_BARRAGE -> onPlayerFireLineBarrage(coord)
-                                    else -> onPlayerFireAt(coord)
-                                }
-                            }
-                        },
-                        onDroneScan = {
-                            battleState.selectedAttackCoord?.let { onPlayerDroneScan(it) }
-                        },
-                        onShield = ::onPlayerActivateShield,
-                        onEndTurn = {
-                            if (!isAiTurnInProgress && battleState.isPlayerTurn) {
-                                triggerEnemyTurn()
-                            }
-                        },
-                        onOpenCombatLog = {
-                            showCombatLogDialog = true
-                        }
+                        remainingTurnSeconds = remainingTurnSeconds,
+                        onBack = { showExitConfirmationDialog = true },
+                        onOpenInfo = { showInfoDialog = true },
+                        onOpenSettings = { showSettingsDialog = true },
+                        onOpenExit = { showExitDialog = true }
                     )
+
+                    Spacer(modifier = Modifier.height(if (layoutInfo.isCompactLandscape) 3.dp else 6.dp))
+
+                    // 2. CANLI DURUM & BİLDİRİM BANDI (Status Banner)
+                    if (!layoutInfo.isCompactLandscape) {
+                        TacticalBannerStrip(
+                            message = battleState.lastBannerMessage,
+                            isAlert = battleState.lastBannerMessage.contains("⚠️") ||
+                                battleState.lastBannerMessage.contains("🚨") ||
+                                battleState.lastBannerMessage.contains("💥") ||
+                                battleState.lastBannerMessage.contains("⏱️"),
+                            isAiThinking = isAiTurnInProgress,
+                            isPlayerTurn = battleState.isPlayerTurn,
+                            turnNumber = battleState.turnNumber,
+                            remainingTurnSeconds = remainingTurnSeconds,
+                            phase = battleState.phase
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+
+                // 3. ANA GÖVDE: GEMİ YERLEŞTİRME VEYA ADAPTİF MUHAREBE SAHASI
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    if (battleState.phase == BattlePhase.DEPLOYMENT) {
+                        FleetDeploymentWorkspace(
+                            battleState = battleState,
+                            isWideLayout = isWideLayout,
+                            onSelectShip = { shipId ->
+                                val s = battleState.friendlyShips.firstOrNull { it.id == shipId }
+                                battleState = battleState.copy(
+                                    selectedDeploymentCategory = "SHIP",
+                                    selectedDeploymentShipId = shipId,
+                                    deploymentDirectionIndex = s?.directionIndex ?: battleState.deploymentDirectionIndex
+                                )
+                            },
+                            onSelectRadioactiveZone = { radIdx ->
+                                val rz = battleState.friendlyRadioactiveZones.getOrNull(radIdx)
+                                battleState = battleState.copy(
+                                    selectedDeploymentCategory = "RADIOACTIVE",
+                                    selectedDeploymentRadioactiveIndex = radIdx,
+                                    deploymentDirectionIndex = rz?.directionIndex ?: battleState.deploymentDirectionIndex
+                                )
+                            },
+                            onHexClicked = ::onDeploymentHexClicked,
+                            onRotate = ::onRotateSelectedShip,
+                            onRotateBiDirectional = ::onRotateSelectedShip,
+                            onRandomize = ::onRandomizeFleet,
+                            onStartCombat = {
+                                haptics.playButtonClick()
+                                soundManager.playCannonFire()
+                                battleState = battleState.copy(
+                                    phase = BattlePhase.COMBAT,
+                                    lastBannerMessage = "⚔️ MUHAREBE BAŞLADI! Hedefe dokunup ateş edin"
+                                )
+                            },
+                            onShowDeployableInfo = { selectedDeployableObjectInfo = it }
+                        )
+                    } else {
+                        DualBoardCombatWorkspace(
+                            battleState = battleState,
+                            layoutInfo = layoutInfo,
+                            gameMode = gameMode,
+                            remainingTurnSeconds = remainingTurnSeconds,
+                            isAiThinking = isAiTurnInProgress,
+                            onBack = { showExitConfirmationDialog = true },
+                            onOpenInfo = { showInfoDialog = true },
+                            onOpenSettings = { showSettingsDialog = true },
+                            onOpenExit = { showExitDialog = true },
+                            onEnemyHexClicked = { clickedHex ->
+                                haptics.playSonarTick()
+                                soundManager.playRadarPing()
+                                when (battleState.activeSpecialMode) {
+                                    SpecialActionMode.EMP_STRIKE -> {
+                                        if (battleState.selectedAttackCoord == clickedHex) {
+                                            onPlayerFireEmp(clickedHex)
+                                        } else {
+                                            battleState = battleState.copy(
+                                                selectedAttackCoord = clickedHex,
+                                                selectedTargetCoord = clickedHex,
+                                                lastBannerMessage = "⚡ EMP HEDEFİ: (${clickedHex.q}, ${clickedHex.r}) — Vurmak için dokunun"
+                                            )
+                                        }
+                                    }
+                                    SpecialActionMode.LINE_BARRAGE -> {
+                                        if (battleState.selectedAttackCoord == clickedHex) {
+                                            onPlayerFireLineBarrage(clickedHex)
+                                        } else {
+                                            battleState = battleState.copy(
+                                                selectedAttackCoord = clickedHex,
+                                                selectedTargetCoord = clickedHex,
+                                                lastBannerMessage = "💥 BOMBARDIMAN: (${clickedHex.q}, ${clickedHex.r}) — Vurmak için dokunun"
+                                            )
+                                        }
+                                    }
+                                    else -> {
+                                        if (battleState.selectedAttackCoord == clickedHex &&
+                                            clickedHex !in battleState.playerShotsOnEnemy.keys
+                                        ) {
+                                            // Aynı peteğe ikinci kez dokunulduğunda hızlı ateş et!
+                                            onPlayerFireAt(clickedHex)
+                                        } else {
+                                            battleState = battleState.copy(
+                                                selectedAttackCoord = clickedHex,
+                                                selectedTargetCoord = clickedHex,
+                                                selectedShieldCoord = null,
+                                                lastBannerMessage = "🎯 HEDEF: (${clickedHex.q}, ${clickedHex.r}) — Ateş için dokunun"
+                                            )
+                                        }
+                                    }
+                                }
+                            },
+                            onFriendlyHexClicked = { clickedHex ->
+                                haptics.playSonarTick()
+                                battleState = battleState.copy(
+                                    selectedShieldCoord = clickedHex,
+                                    lastBannerMessage = "🛡️ KALKAN: (${clickedHex.q}, ${clickedHex.r}) — Kurmak için butona dokunun"
+                                )
+                            },
+                            onRadialAction = { coord, actionType ->
+                                when (actionType) {
+                                    RadialActionType.FIRE -> onPlayerFireAt(coord)
+                                    RadialActionType.DRONE -> {
+                                        val isCarrierAlive = battleState.friendlyShips.any { it.id.contains("carrier") && !it.isSunk }
+                                        if (!isCarrierAlive) {
+                                            haptics.playButtonClick()
+                                            battleState = battleState.copy(
+                                                lastBannerMessage = "⚠️ İHA Taşıyıcı battı, keşif devre dışı!"
+                                            )
+                                        } else {
+                                            onPlayerDroneScan(coord)
+                                        }
+                                    }
+                                    RadialActionType.SHIELD -> {
+                                        battleState = battleState.copy(selectedShieldCoord = coord)
+                                        onPlayerActivateShield()
+                                    }
+                                }
+                            },
+                            onToggleEmp = ::onToggleEmp,
+                            onToggleBarrage = ::onToggleBarrage,
+                            onCycleBarrageDir = ::onCycleBarrageDir,
+                            onFire = {
+                                battleState.selectedAttackCoord?.let { coord ->
+                                    when (battleState.activeSpecialMode) {
+                                        SpecialActionMode.EMP_STRIKE -> onPlayerFireEmp(coord)
+                                        SpecialActionMode.LINE_BARRAGE -> onPlayerFireLineBarrage(coord)
+                                        else -> onPlayerFireAt(coord)
+                                    }
+                                }
+                            },
+                            onDroneScan = {
+                                battleState.selectedAttackCoord?.let { onPlayerDroneScan(it) }
+                            },
+                            onShield = ::onPlayerActivateShield,
+                            onEndTurn = {
+                                if (!isAiTurnInProgress && battleState.isPlayerTurn) {
+                                    triggerEnemyTurn()
+                                }
+                            },
+                            onOpenCombatLog = {
+                                showCombatLogDialog = true
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -1903,7 +1933,7 @@ private fun CompactBattleHeader(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                val isTabletHeader = LocalConfiguration.current.screenWidthDp >= 600
+                val isTabletHeader = currentHexaFleetLayoutInfo().isTabletOrExpanded
 
                 Column(
                     modifier = Modifier.weight(1f),
@@ -2144,8 +2174,7 @@ private fun TacticalBannerStrip(
         border = androidx.compose.foundation.BorderStroke(1.dp, containerBorder),
         shadowElevation = 1.dp
     ) {
-        val configuration = LocalConfiguration.current
-        val isTablet = configuration.screenWidthDp >= 600
+        val isTablet = currentHexaFleetLayoutInfo().isTabletOrExpanded
 
         Row(
             modifier = Modifier.padding(horizontal = if (isTablet) 8.dp else 6.dp, vertical = if (isTablet) 5.dp else 3.5.dp),
@@ -2243,9 +2272,11 @@ private fun TacticalBannerStrip(
             }
 
             // Temizlenmiş mesaj metni (Tekrarlayan 'SIRA SİZDE' ibarelerini temizleyip doğrudan taktiksel yönlendirmeyi verir)
-            val cleanedMessage = message
+            val rawCleaned = message
                 .replace(Regex("^🎯?\\s*S[İI]RA\\s+S[İI]ZDE[^:]*:\\s*", RegexOption.IGNORE_CASE), "")
                 .replace(Regex("^⚡?\\s*DÜŞMAN\\s+SIRASI[^:]*:\\s*", RegexOption.IGNORE_CASE), "")
+            val hasTargetIcon = rawCleaned.contains("🎯")
+            val cleanedMessage = rawCleaned.replace("🎯", "").trim()
 
             val bannerFontSize = when {
                 isTablet -> 9.5.sp
@@ -2253,6 +2284,15 @@ private fun TacticalBannerStrip(
                 cleanedMessage.length > 38 -> 7.2.sp
                 cleanedMessage.length > 28 -> 7.8.sp
                 else -> 8.5.sp
+            }
+
+            if (hasTargetIcon) {
+                Image(
+                    painter = painterResource(R.drawable.ic_target_3d),
+                    contentDescription = "Hedef",
+                    modifier = Modifier.size(if (isTablet) 14.dp else 12.dp),
+                    contentScale = ContentScale.Fit
+                )
             }
 
             Text(
@@ -2906,8 +2946,14 @@ private fun DeploymentControlPanel(
 @Composable
 private fun DualBoardCombatWorkspace(
     battleState: DualBattleUiState,
-    isWideLayout: Boolean,
+    layoutInfo: HexaFleetLayoutInfo,
+    gameMode: TacticalGameMode,
+    remainingTurnSeconds: Int,
     isAiThinking: Boolean,
+    onBack: () -> Unit,
+    onOpenInfo: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenExit: () -> Unit,
     onEnemyHexClicked: (HexCoordinate) -> Unit,
     onFriendlyHexClicked: (HexCoordinate) -> Unit,
     onRadialAction: (HexCoordinate, RadialActionType) -> Unit,
@@ -2923,46 +2969,49 @@ private fun DualBoardCombatWorkspace(
     val enemyAttackBoardState = battleState.toEnemyAttackBoardState(isRadarActive = true)
     val friendlyDefenseBoardState = battleState.toFriendlyBoardState()
 
-    val aliveEnemyShips = battleState.enemyShips.count { !it.isSunk }
-    val aliveFriendlyShips = battleState.friendlyShips.count { !it.isSunk }
-    val isCarrierAlive = battleState.friendlyShips.any { it.id.contains("carrier") && !it.isSunk }
-    val isDeltaAlive = battleState.friendlyShips.any { it.id.contains("delta") && !it.isSunk }
-    val isFlagshipAlive = battleState.friendlyShips.any { it.id.contains("flagship") && !it.isSunk }
+    val aliveEnemyShips by remember(battleState.enemyShips) {
+        derivedStateOf { battleState.enemyShips.count { !it.isSunk } }
+    }
+    val aliveFriendlyShips by remember(battleState.friendlyShips) {
+        derivedStateOf { battleState.friendlyShips.count { !it.isSunk } }
+    }
+    val isCarrierAlive by remember(battleState.friendlyShips) {
+        derivedStateOf { battleState.friendlyShips.any { it.id.contains("carrier") && !it.isSunk } }
+    }
+    val isDeltaAlive by remember(battleState.friendlyShips) {
+        derivedStateOf { battleState.friendlyShips.any { it.id.contains("delta") && !it.isSunk } }
+    }
+    val isFlagshipAlive by remember(battleState.friendlyShips) {
+        derivedStateOf { battleState.friendlyShips.any { it.id.contains("flagship") && !it.isSunk } }
+    }
 
-    if (isWideLayout) {
-        // ==================== GENİŞ EKRAN / YATAY: SAĞ - SOL ÇİFT HARİTA ====================
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+    when (layoutInfo.posture) {
+        DevicePosture.COMPACT_LANDSCAPE -> {
+            // ==================== 1. YATAY TELEFON: KENAR RAYI (SIDE RAIL / COCKPIT) DÜZENİ ====================
+            // Haritalar ekranın tüm dikey yüksekliğini (380dp) kullanır; başlık ve aksiyonlar sağ dikey raya alınır.
             Row(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // SOL HARİTA: DÜŞMAN HEDEF RADARI (SALDIRI SAHASI)
+                // SOL %42: DÜŞMAN HEDEF RADARI (TAM YÜKSEKLİK)
                 BoardContainerCard(
-                    title = "🎯 DÜŞMAN HEDEF RADARI",
-                    subtitle = "Ateş veya İHA keşfi için düşman peteğine dokunun",
-                    badgeText = "HEDEF: $aliveEnemyShips/4 GEMİ",
+                    title = "DÜŞMAN HEDEF RADARI",
+                    subtitle = "Ateş veya İHA keşfi için dokunun",
+                    badgeText = "HEDEF: $aliveEnemyShips/4",
                     badgeColor = BoardColors.CrimsonRed,
                     borderColor = BoardColors.CrimsonRed.copy(alpha = 0.65f),
                     isAttackBoard = true,
+                    isCompactCard = true,
                     footerContent = {
                         FleetMiniStatusRow(
-                            label = "DÜŞMAN FİLOSU:",
+                            label = "DÜŞMAN:",
                             ships = battleState.enemyShips,
                             activeColor = BoardColors.CrimsonRed
                         )
                     },
                     modifier = Modifier.weight(1f).fillMaxHeight()
                 ) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        HexBoardCanvas(
-                            state = enemyAttackBoardState,
-                            modifier = Modifier.fillMaxSize(),
-                            onHexClicked = onEnemyHexClicked,
-                            onRadialAction = onRadialAction
-                        )
+                    Column(modifier = Modifier.fillMaxSize()) {
                         TacticalSpecialOpsOverlay(
                             battleState = battleState,
                             isDeltaAlive = isDeltaAlive,
@@ -2971,24 +3020,32 @@ private fun DualBoardCombatWorkspace(
                             onToggleEmp = onToggleEmp,
                             onToggleBarrage = onToggleBarrage,
                             onCycleBarrageDir = onCycleBarrageDir,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .align(Alignment.TopCenter)
+                            onFireSpecial = onFire,
+                            modifier = Modifier.fillMaxWidth()
                         )
+                        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                            HexBoardCanvas(
+                                state = enemyAttackBoardState,
+                                modifier = Modifier.fillMaxSize(),
+                                onHexClicked = onEnemyHexClicked,
+                                onRadialAction = onRadialAction
+                            )
+                        }
                     }
                 }
 
-                // SAĞ HARİTA: DOST FİLO HARİTASI (SAVUNMA SAHASI)
+                // ORTA %42: DOST FİLO HARİTASI (TAM YÜKSEKLİK)
                 BoardContainerCard(
                     title = "🛡️ DOST FİLO HARİTASI",
-                    subtitle = "Savunma kubbesi, filo dizilimi ve gelen saldırılar",
-                    badgeText = "SAĞLAM: $aliveFriendlyShips/4 GEMİ",
+                    subtitle = "Savunma kubbesi ve filo durumu",
+                    badgeText = "SAĞLAM: $aliveFriendlyShips/4",
                     badgeColor = BoardColors.NavyAccent,
                     borderColor = BoardColors.NavyAccent.copy(alpha = 0.65f),
                     isAttackBoard = false,
+                    isCompactCard = true,
                     footerContent = {
                         FleetMiniStatusRow(
-                            label = "DOST FİLO:",
+                            label = "DOST:",
                             ships = battleState.friendlyShips,
                             activeColor = BoardColors.NavyAccent
                         )
@@ -3001,108 +3058,1101 @@ private fun DualBoardCombatWorkspace(
                         onHexClicked = onFriendlyHexClicked
                     )
                 }
+
+                // SAĞ DİKEY RAY (SIDE RAIL / COCKPIT CONSOLE): Başlık + Tur + CP + Aksiyon Butonları
+                LandscapeCockpitSideRail(
+                    battleState = battleState,
+                    gameMode = gameMode,
+                    remainingTurnSeconds = remainingTurnSeconds,
+                    isAiThinking = isAiThinking,
+                    isCarrierAlive = isCarrierAlive,
+                    onBack = onBack,
+                    onOpenInfo = onOpenInfo,
+                    onOpenSettings = onOpenSettings,
+                    onOpenExit = onOpenExit,
+                    onFire = onFire,
+                    onDroneScan = onDroneScan,
+                    onShield = onShield,
+                    onEndTurn = onEndTurn,
+                    onOpenLog = onOpenCombatLog,
+                    modifier = Modifier.width(172.dp).fillMaxHeight()
+                )
+            }
+        }
+
+        DevicePosture.FOLDABLE_SQUARE,
+        DevicePosture.EXPANDED_TABLET -> {
+            // ==================== 2. KATLANABİLİR / TABLET: MENTEŞE FARKINDALIĞI & BİLGİ PANELİ ====================
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // SOL HARİTA (%45): DÜŞMAN HEDEF RADARI
+                    BoardContainerCard(
+                        title = "DÜŞMAN HEDEF RADARI",
+                        subtitle = "Ateş veya İHA keşfi için düşman peteğine dokunun",
+                        badgeText = "HEDEF: $aliveEnemyShips/4 GEMİ",
+                        badgeColor = BoardColors.CrimsonRed,
+                        borderColor = BoardColors.CrimsonRed.copy(alpha = 0.65f),
+                        isAttackBoard = true,
+                        footerContent = {
+                            FleetMiniStatusRow(
+                                label = "DÜŞMAN FİLOSU:",
+                                ships = battleState.enemyShips,
+                                activeColor = BoardColors.CrimsonRed
+                            )
+                        },
+                        modifier = Modifier.weight(1f).fillMaxHeight()
+                    ) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            TacticalSpecialOpsOverlay(
+                                battleState = battleState,
+                                isDeltaAlive = isDeltaAlive,
+                                isFlagshipAlive = isFlagshipAlive,
+                                isAiThinking = isAiThinking,
+                                onToggleEmp = onToggleEmp,
+                                onToggleBarrage = onToggleBarrage,
+                                onCycleBarrageDir = onCycleBarrageDir,
+                                onFireSpecial = onFire,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                HexBoardCanvas(
+                                    state = enemyAttackBoardState,
+                                    modifier = Modifier.fillMaxSize(),
+                                    onHexClicked = onEnemyHexClicked,
+                                    onRadialAction = onRadialAction
+                                )
+                            }
+                        }
+                    }
+
+                    // SAĞ / ORTA HARİTA (%45): DOST FİLO HARİTASI
+                    BoardContainerCard(
+                        title = "🛡️ DOST FİLO HARİTASI",
+                        subtitle = "Savunma kubbesi, filo dizilimi ve gelen saldırılar",
+                        badgeText = "SAĞLAM: $aliveFriendlyShips/4 GEMİ",
+                        badgeColor = BoardColors.NavyAccent,
+                        borderColor = BoardColors.NavyAccent.copy(alpha = 0.65f),
+                        isAttackBoard = false,
+                        footerContent = {
+                            FleetMiniStatusRow(
+                                label = "DOST FİLO:",
+                                ships = battleState.friendlyShips,
+                                activeColor = BoardColors.NavyAccent
+                            )
+                        },
+                        modifier = Modifier.weight(1f).fillMaxHeight()
+                    ) {
+                        HexBoardCanvas(
+                            state = friendlyDefenseBoardState,
+                            modifier = Modifier.fillMaxSize(),
+                            onHexClicked = onFriendlyHexClicked
+                        )
+                    }
+
+                    // GENİŞ TABLETLERDE SABİT 3. SÜTUN: TAKTİK İSTİHBARAT & MUHAREBE GÜNLÜĞÜ
+                    if (layoutInfo.isExpandedTablet) {
+                        TacticalIntelAndLogSidePanel(
+                            battleState = battleState,
+                            isDeltaAlive = isDeltaAlive,
+                            isFlagshipAlive = isFlagshipAlive,
+                            isCarrierAlive = isCarrierAlive,
+                            onOpenFullLog = onOpenCombatLog,
+                            modifier = Modifier.width(210.dp).fillMaxHeight()
+                        )
+                    }
+                }
+
+                // ALT KOMUTA KONSOLU (Tactical Action Bar)
+                CombatActionConsole(
+                    selectedCoord = battleState.selectedAttackCoord,
+                    commandPoints = battleState.commandPoints,
+                    isPlayerTurn = battleState.isPlayerTurn && !isAiThinking,
+                    isCarrierAlive = isCarrierAlive,
+                    onFire = onFire,
+                    onDroneScan = onDroneScan,
+                    onShield = onShield,
+                    onEndTurn = onEndTurn,
+                    onOpenLog = onOpenCombatLog
+                )
+            }
+        }
+
+        DevicePosture.COMPACT_PORTRAIT -> {
+            // ==================== 3. DİKEY TELEFON: HEDEF ODAKLI + MİNİ-RADAR (PiP) DÜZENİ ====================
+            // Varsayılan olarak ana ekranda aktif harita tam boy yer alır, sağ alt köşede tıklanabilir
+            // Mini-Radar (PiP) yer alır. Kullanıcı isterse üstteki anahtarla Çift Harita görünümüne de geçebilir.
+            var isPipRadarMode by remember { mutableStateOf(true) }
+            var showFriendlyAsMainInPip by remember { mutableStateOf(false) }
+
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Üst Taktiksel Görünüm & Radar Geçiş Şeridi
+                PortraitRadarViewSwitcherBar(
+                    isPipRadarMode = isPipRadarMode,
+                    showFriendlyAsMain = showFriendlyAsMainInPip,
+                    aliveEnemyShips = aliveEnemyShips,
+                    aliveFriendlyShips = aliveFriendlyShips,
+                    onSelectAttackMain = { showFriendlyAsMainInPip = false },
+                    onSelectFriendlyMain = { showFriendlyAsMainInPip = true },
+                    onTogglePipMode = { isPipRadarMode = !isPipRadarMode }
+                )
+
+                if (isPipRadarMode) {
+                    // --- HEDEF ODAKLI TAM BOY HARİTA + SAĞ ALT MİNİ-RADAR (PiP) ---
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        if (!showFriendlyAsMainInPip) {
+                            // ANA EKRAN: TAM BOY DÜŞMAN HEDEF RADARI
+                            BoardContainerCard(
+                                title = "DÜŞMAN HEDEF RADARI",
+                                subtitle = "Yakınlaştırın, büyüteçle nişan alın ve ateş edin",
+                                badgeText = "DÜŞMAN: $aliveEnemyShips/4",
+                                badgeColor = BoardColors.CrimsonRed,
+                                borderColor = BoardColors.CrimsonRed.copy(alpha = 0.70f),
+                                isAttackBoard = true,
+                                isCompactCard = false,
+                                footerContent = {
+                                    FleetMiniStatusRow(
+                                        label = "DÜŞMAN:",
+                                        ships = battleState.enemyShips,
+                                        activeColor = BoardColors.CrimsonRed
+                                    )
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Column(modifier = Modifier.fillMaxSize()) {
+                                    // Özel Yetenekler (İyon Şoku & Bombardıman) kendi satırında yer alır; peteklerin üstüne asla binmez!
+                                    TacticalSpecialOpsOverlay(
+                                        battleState = battleState,
+                                        isDeltaAlive = isDeltaAlive,
+                                        isFlagshipAlive = isFlagshipAlive,
+                                        isAiThinking = isAiThinking,
+                                        onToggleEmp = onToggleEmp,
+                                        onToggleBarrage = onToggleBarrage,
+                                        onCycleBarrageDir = onCycleBarrageDir,
+                                        onFireSpecial = onFire,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                        HexBoardCanvas(
+                                            state = enemyAttackBoardState,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(bottom = 18.dp),
+                                            onHexClicked = onEnemyHexClicked,
+                                            onRadialAction = onRadialAction
+                                        )
+
+                                        // SAĞ ALT KÖŞE: DOST FİLO MİNİ-RADARI (PiP - Kompakt & Peteklere Binmeyen Boyut)
+                                        FloatingPipMiniRadarCard(
+                                            title = "🛡️ DOST ($aliveFriendlyShips/4)",
+                                            isAttackMiniRadar = false,
+                                            accentColor = BoardColors.NavyAccent,
+                                            boardState = friendlyDefenseBoardState,
+                                            onSwapToMain = { showFriendlyAsMainInPip = true },
+                                            modifier = Modifier
+                                                .align(Alignment.BottomEnd)
+                                                .padding(end = 4.dp, bottom = 4.dp)
+                                                .size(width = 88.dp, height = 94.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            // ANA EKRAN: TAM BOY DOST FİLO HARİTASI (Kalkan kurma ve savunma inceleme)
+                            BoardContainerCard(
+                                title = "🛡️ DOST FİLO HARİTASI",
+                                subtitle = "Aegis Kalkanı kurmak için dost peteğine dokunun",
+                                badgeText = "DOST: $aliveFriendlyShips/4",
+                                badgeColor = BoardColors.NavyAccent,
+                                borderColor = BoardColors.NavyAccent.copy(alpha = 0.70f),
+                                isAttackBoard = false,
+                                isCompactCard = false,
+                                footerContent = {
+                                    FleetMiniStatusRow(
+                                        label = "FİLOMUZ:",
+                                        ships = battleState.friendlyShips,
+                                        activeColor = BoardColors.NavyAccent
+                                    )
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Box(modifier = Modifier.fillMaxSize()) {
+                                    HexBoardCanvas(
+                                        state = friendlyDefenseBoardState,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(bottom = 18.dp),
+                                        onHexClicked = onFriendlyHexClicked
+                                    )
+
+                                    // SAĞ ALT KÖŞE: DÜŞMAN HEDEF MİNİ-RADARI (PiP - Kompakt Boyut)
+                                    FloatingPipMiniRadarCard(
+                                        title = "HEDEF ($aliveEnemyShips/4)",
+                                        isAttackMiniRadar = true,
+                                        accentColor = BoardColors.CrimsonRed,
+                                        boardState = enemyAttackBoardState,
+                                        onSwapToMain = { showFriendlyAsMainInPip = false },
+                                        modifier = Modifier
+                                            .align(Alignment.BottomEnd)
+                                            .padding(end = 4.dp, bottom = 4.dp)
+                                            .size(width = 88.dp, height = 94.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // ALT KOMUTA KONSOLU
+                    CombatActionConsole(
+                        selectedCoord = if (showFriendlyAsMainInPip) {
+                            battleState.selectedShieldCoord ?: battleState.selectedAttackCoord
+                        } else {
+                            battleState.selectedAttackCoord
+                        },
+                        commandPoints = battleState.commandPoints,
+                        isPlayerTurn = battleState.isPlayerTurn && !isAiThinking,
+                        isCarrierAlive = isCarrierAlive,
+                        onFire = {
+                            if (showFriendlyAsMainInPip) {
+                                showFriendlyAsMainInPip = false
+                            }
+                            onFire()
+                        },
+                        onDroneScan = {
+                            if (showFriendlyAsMainInPip) {
+                                showFriendlyAsMainInPip = false
+                            }
+                            onDroneScan()
+                        },
+                        onShield = {
+                            if (!showFriendlyAsMainInPip && battleState.selectedShieldCoord == null) {
+                                showFriendlyAsMainInPip = true
+                            }
+                            onShield()
+                        },
+                        onEndTurn = onEndTurn,
+                        onOpenLog = onOpenCombatLog
+                    )
+                } else {
+                    // --- KLASİK ALT-ÜST ÇİFT HARİTA MODU ---
+                    BoardContainerCard(
+                        title = "DÜŞMAN HEDEF RADARI",
+                        subtitle = "Vurmak için peteğe dokunun",
+                        badgeText = "DÜŞMAN: $aliveEnemyShips/4",
+                        badgeColor = BoardColors.CrimsonRed,
+                        borderColor = BoardColors.CrimsonRed.copy(alpha = 0.65f),
+                        isAttackBoard = true,
+                        isCompactCard = false,
+                        footerContent = {
+                            FleetMiniStatusRow(
+                                label = "DÜŞMAN:",
+                                ships = battleState.enemyShips,
+                                activeColor = BoardColors.CrimsonRed
+                            )
+                        },
+                        modifier = Modifier.weight(0.58f).fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            TacticalSpecialOpsOverlay(
+                                battleState = battleState,
+                                isDeltaAlive = isDeltaAlive,
+                                isFlagshipAlive = isFlagshipAlive,
+                                isAiThinking = isAiThinking,
+                                onToggleEmp = onToggleEmp,
+                                onToggleBarrage = onToggleBarrage,
+                                onCycleBarrageDir = onCycleBarrageDir,
+                                onFireSpecial = onFire,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                HexBoardCanvas(
+                                    state = enemyAttackBoardState,
+                                    modifier = Modifier.fillMaxSize(),
+                                    onHexClicked = onEnemyHexClicked,
+                                    onRadialAction = onRadialAction
+                                )
+                            }
+                        }
+                    }
+
+                    CombatActionConsole(
+                        selectedCoord = battleState.selectedAttackCoord,
+                        commandPoints = battleState.commandPoints,
+                        isPlayerTurn = battleState.isPlayerTurn && !isAiThinking,
+                        isCarrierAlive = isCarrierAlive,
+                        onFire = onFire,
+                        onDroneScan = onDroneScan,
+                        onShield = onShield,
+                        onEndTurn = onEndTurn,
+                        onOpenLog = onOpenCombatLog
+                    )
+
+                    BoardContainerCard(
+                        title = "🛡️ DOST FİLO HARİTASI",
+                        subtitle = "Filo durumu ve savunma kalkanı",
+                        badgeText = "DOST: $aliveFriendlyShips/4",
+                        badgeColor = BoardColors.NavyAccent,
+                        borderColor = BoardColors.NavyAccent.copy(alpha = 0.65f),
+                        isAttackBoard = false,
+                        isCompactCard = true,
+                        footerContent = {
+                            FleetMiniStatusRow(
+                                label = "FİLOMUZ:",
+                                ships = battleState.friendlyShips,
+                                activeColor = BoardColors.NavyAccent
+                            )
+                        },
+                        modifier = Modifier.weight(0.30f).fillMaxWidth()
+                    ) {
+                        HexBoardCanvas(
+                            state = friendlyDefenseBoardState,
+                            modifier = Modifier.fillMaxSize(),
+                            onHexClicked = onFriendlyHexClicked
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Dikey Telefon (Portrait) modunda Saldırı Radarı ve Savunma Hattı arasında tek dokunuşla
+ * geçiş sağlayan ve PiP / Çift Harita görünümünü değiştiren kompakt taktik şerit.
+ */
+@Composable
+private fun PortraitRadarViewSwitcherBar(
+    isPipRadarMode: Boolean,
+    showFriendlyAsMain: Boolean,
+    aliveEnemyShips: Int,
+    aliveFriendlyShips: Int,
+    onSelectAttackMain: () -> Unit,
+    onSelectFriendlyMain: () -> Unit,
+    onTogglePipMode: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = BoardColors.PureWhite,
+        shape = RoundedCornerShape(10.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BoardColors.BorderSubtle),
+        shadowElevation = 1.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp, vertical = 3.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isPipRadarMode) {
+                val attackSelected = !showFriendlyAsMain
+                Surface(
+                    onClick = onSelectAttackMain,
+                    modifier = Modifier.weight(1f).height(28.dp),
+                    shape = RoundedCornerShape(7.dp),
+                    color = if (attackSelected) Color(0xFFFFF1F2) else BoardColors.SurfaceSubtle,
+                    border = androidx.compose.foundation.BorderStroke(
+                        if (attackSelected) 1.3.dp else 0.7.dp,
+                        if (attackSelected) BoardColors.CrimsonRed else BoardColors.BorderSubtle
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_target_3d),
+                            contentDescription = null,
+                            modifier = Modifier.size(13.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "HEDEF RADARI ($aliveEnemyShips/4)",
+                            color = if (attackSelected) BoardColors.CrimsonRed else BoardColors.TextSecondary,
+                            fontSize = 8.5.sp,
+                            fontWeight = if (attackSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                val friendlySelected = showFriendlyAsMain
+                Surface(
+                    onClick = onSelectFriendlyMain,
+                    modifier = Modifier.weight(1f).height(28.dp),
+                    shape = RoundedCornerShape(7.dp),
+                    color = if (friendlySelected) Color(0xFFEFF6FF) else BoardColors.SurfaceSubtle,
+                    border = androidx.compose.foundation.BorderStroke(
+                        if (friendlySelected) 1.3.dp else 0.7.dp,
+                        if (friendlySelected) BoardColors.NavyAccent else BoardColors.BorderSubtle
+                    )
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "🛡️ DOST HARİTA ($aliveFriendlyShips/4)",
+                            color = if (friendlySelected) BoardColors.NavyAccent else BoardColors.TextSecondary,
+                            fontSize = 8.5.sp,
+                            fontWeight = if (friendlySelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    text = "⚔️ ÇİFT RADAR GÖRÜNÜMÜ (ALT-ÜST)",
+                    color = BoardColors.NavyDark,
+                    fontSize = 8.5.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.weight(1f).padding(start = 6.dp)
+                )
             }
 
-            // ALT KOMUTA KONSOLU (Tactical Action Bar)
-            CombatActionConsole(
-                selectedCoord = battleState.selectedAttackCoord,
-                commandPoints = battleState.commandPoints,
-                isPlayerTurn = battleState.isPlayerTurn && !isAiThinking,
-                isCarrierAlive = isCarrierAlive,
-                onFire = onFire,
-                onDroneScan = onDroneScan,
-                onShield = onShield,
-                onEndTurn = onEndTurn,
-                onOpenLog = onOpenCombatLog
-            )
-        }
-    } else {
-        // ==================== DİKEY / MOBİL EKRAN: ALT - ÜST ÇİFT HARİTA ====================
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            // ÜST HARİTA: DÜŞMAN HEDEF RADARI (SALDIRI SAHASI - GENİŞLETİLMİŞ MOBİL ALAN)
-            BoardContainerCard(
-                title = "🎯 DÜŞMAN HEDEF RADARI",
-                subtitle = "Vurmak için peteğe dokunun",
-                badgeText = "DÜŞMAN: $aliveEnemyShips/4",
-                badgeColor = BoardColors.CrimsonRed,
-                borderColor = BoardColors.CrimsonRed.copy(alpha = 0.65f),
-                isAttackBoard = true,
-                isCompactCard = false,
-                footerContent = {
-                    FleetMiniStatusRow(
-                        label = "DÜŞMAN:",
-                        ships = battleState.enemyShips,
-                        activeColor = BoardColors.CrimsonRed
-                    )
-                },
-                modifier = Modifier.weight(0.58f).fillMaxWidth()
+            Surface(
+                onClick = onTogglePipMode,
+                modifier = Modifier.height(28.dp),
+                shape = RoundedCornerShape(7.dp),
+                color = BoardColors.NavyDark
             ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    val hasSpecialCards = battleState.customRules.maxEmpStrikes > 0 || battleState.customRules.maxLineBarrages > 0
-                    HexBoardCanvas(
-                        state = enemyAttackBoardState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(top = if (hasSpecialCards) 18.dp else 0.dp),
-                        onHexClicked = onEnemyHexClicked,
-                        onRadialAction = onRadialAction
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    if (!isPipRadarMode) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_target_3d),
+                            contentDescription = null,
+                            modifier = Modifier.size(11.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                    }
+                    Text(
+                        text = if (isPipRadarMode) "⧉ ÇİFT" else "PiP",
+                        color = Color.White,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace
                     )
-                    TacticalSpecialOpsOverlay(
-                        battleState = battleState,
-                        isDeltaAlive = isDeltaAlive,
-                        isFlagshipAlive = isFlagshipAlive,
-                        isAiThinking = isAiThinking,
-                        onToggleEmp = onToggleEmp,
-                        onToggleBarrage = onToggleBarrage,
-                        onCycleBarrageDir = onCycleBarrageDir,
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Dikey telefonda sağ alt köşede yer alan, diğer haritayı canlı gösteren ve dokunulduğunda
+ * ana harita ile yer değiştiren Picture-in-Picture (PiP) Mini-Radar bileşeni.
+ */
+@Composable
+private fun FloatingPipMiniRadarCard(
+    title: String,
+    isAttackMiniRadar: Boolean = false,
+    accentColor: Color,
+    boardState: com.hexafleet.feature.board.model.HexBoardUiState,
+    onSwapToMain: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .clip(RoundedCornerShape(11.dp))
+            .clickable(onClick = onSwapToMain),
+        color = Color(0xF50F172A),
+        shape = RoundedCornerShape(11.dp),
+        border = androidx.compose.foundation.BorderStroke(1.3.dp, accentColor),
+        shadowElevation = 5.dp
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Üst Mini-Radar Başlığı
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(accentColor.copy(alpha = 0.22f))
+                    .padding(horizontal = 5.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.5.dp),
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    if (isAttackMiniRadar) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_target_3d),
+                            contentDescription = null,
+                            modifier = Modifier.size(9.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                    Text(
+                        text = title,
+                        color = Color.White,
+                        fontSize = 6.2.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+                Text(
+                    text = "⇄",
+                    color = Color(0xFF38BDF8),
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+
+            // Canlı Mini Altıgen Radar Önizlemesi
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(1.5.dp)
+            ) {
+                HexBoardCanvas(
+                    state = boardState,
+                    modifier = Modifier.fillMaxSize(),
+                    onHexClicked = { onSwapToMain() },
+                    enableZoomAndPan = false,
+                    enableMagnifier = false
+                )
+            }
+
+            // Alt Bilgi Etiketi
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF1E293B))
+                    .padding(vertical = 1.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "BÜYÜT",
+                    color = Color(0xFF94A3B8),
+                    fontSize = 5.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Yatay Telefon (COMPACT_LANDSCAPE) modunda dikey yüksekliği haritalara bırakmak için
+ * başlık, tur sayacı, CP ve tüm taktik aksiyon butonlarını ekranın sağ kenarına toplayan Kokpit Rayı.
+ */
+@Composable
+private fun LandscapeCockpitSideRail(
+    battleState: DualBattleUiState,
+    gameMode: TacticalGameMode,
+    remainingTurnSeconds: Int,
+    isAiThinking: Boolean,
+    isCarrierAlive: Boolean,
+    onBack: () -> Unit,
+    onOpenInfo: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenExit: () -> Unit,
+    onFire: () -> Unit,
+    onDroneScan: () -> Unit,
+    onShield: () -> Unit,
+    onEndTurn: () -> Unit,
+    onOpenLog: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isPlayerTurn = battleState.isPlayerTurn && !isAiThinking
+    val selectedCoord = battleState.selectedAttackCoord
+    val commandPoints = battleState.commandPoints
+
+    Surface(
+        modifier = modifier,
+        color = BoardColors.PureWhite,
+        shape = RoundedCornerShape(14.dp),
+        border = androidx.compose.foundation.BorderStroke(1.2.dp, BoardColors.BorderSubtle),
+        shadowElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 7.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // 1. ÜST SATIR: GERİ + TUR ROZETİ + SAĞ ÜST İKONLAR
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(BoardColors.SurfaceSubtle)
+                                .border(1.dp, BoardColors.BorderSubtle, CircleShape)
+                                .clickable(onClick = onBack),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Lobiye Dön",
+                                tint = BoardColors.NavyDark,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
+
+                        Surface(
+                            color = BoardColors.NavyDark,
+                            shape = RoundedCornerShape(5.dp)
+                        ) {
+                            Text(
+                                text = "T${battleState.turnNumber}",
+                                color = Color.White,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.5.dp)
+                            )
+                        }
+                    }
+
+                    HexaFleetTopActions(
+                        onOpenInfo = onOpenInfo,
+                        onOpenSettings = onOpenSettings,
+                        onOpenExit = onOpenExit,
+                        isTablet = false
+                    )
+                }
+
+                // Sıra & Süre & CP Durum Kartı
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = if (isPlayerTurn) Color(0xFFF0FDF4) else Color(0xFFFFF1F2),
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        0.8.dp,
+                        if (isPlayerTurn) Color(0xFF86EFAC) else Color(0xFFFDA4AF)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isPlayerTurn) "SIRA SİZDE" else "DÜŞMAN SIRASI",
+                                color = if (isPlayerTurn) Color(0xFF15803D) else BoardColors.CrimsonRed,
+                                fontSize = 7.8.sp,
+                                fontWeight = FontWeight.Black,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = if (remainingTurnSeconds > 0) "${remainingTurnSeconds}s" else "${commandPoints}/${battleState.maxCommandPoints} CP",
+                                color = BoardColors.PurplePrimary,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+
+                        // CP Enerji Hücreleri
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            for (i in 0 until battleState.maxCommandPoints) {
+                                val active = i < commandPoints
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(4.5.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(if (active) BoardColors.PurplePrimary else BoardColors.CommandPointEmpty)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Seçili Hedef Koordinatı
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = BoardColors.SurfaceSubtle,
+                    shape = RoundedCornerShape(7.dp),
+                    border = androidx.compose.foundation.BorderStroke(0.8.dp, BoardColors.BorderSubtle)
+                ) {
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .align(Alignment.TopCenter)
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Image(
+                                painter = painterResource(R.drawable.ic_target_3d),
+                                contentDescription = null,
+                                modifier = Modifier.size(11.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                            Text(
+                                text = "HEDEF:",
+                                color = BoardColors.TextSecondary,
+                                fontSize = 7.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                        Text(
+                            text = if (selectedCoord != null) "(${selectedCoord.q}, ${selectedCoord.r})" else "SEÇİN",
+                            color = if (selectedCoord != null) BoardColors.CrimsonRed else BoardColors.TextMuted,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+
+            // 2. ORTA & ALT: DİKEY TAKTİK AKSİYON BUTONLARI
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                val canFire = isPlayerTurn && selectedCoord != null && commandPoints >= 1
+                Button(
+                    onClick = onFire,
+                    enabled = canFire,
+                    modifier = Modifier.fillMaxWidth().height(32.dp),
+                    shape = RoundedCornerShape(7.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 1.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BoardColors.CrimsonRed,
+                        disabledContainerColor = BoardColors.SurfaceSubtle
+                    )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_target_3d),
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "ATEŞ ET (1 CP)",
+                            color = if (canFire) Color.White else BoardColors.TextMuted,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                val canDrone = isPlayerTurn && selectedCoord != null && commandPoints >= 3 && isCarrierAlive
+                Button(
+                    onClick = onDroneScan,
+                    enabled = canDrone,
+                    modifier = Modifier.fillMaxWidth().height(32.dp),
+                    shape = RoundedCornerShape(7.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 1.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BoardColors.PurplePrimary,
+                        disabledContainerColor = BoardColors.SurfaceSubtle
+                    )
+                ) {
+                    Text(
+                        text = if (isCarrierAlive) "📡 İHA KEŞFİ (3 CP)" else "📡 İHA (KİLİTLİ)",
+                        color = if (canDrone) Color.White else BoardColors.TextMuted,
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1
+                    )
+                }
+
+                val canShield = isPlayerTurn && commandPoints >= 2
+                Button(
+                    onClick = onShield,
+                    enabled = canShield,
+                    modifier = Modifier.fillMaxWidth().height(32.dp),
+                    shape = RoundedCornerShape(7.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 1.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BoardColors.NavyAccent,
+                        disabledContainerColor = BoardColors.SurfaceSubtle
+                    )
+                ) {
+                    Text(
+                        text = "🛡️ KALKAN (2 CP)",
+                        color = if (canShield) Color.White else BoardColors.TextMuted,
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onEndTurn,
+                        enabled = isPlayerTurn,
+                        modifier = Modifier.weight(1f).height(32.dp),
+                        shape = RoundedCornerShape(7.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 1.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BoardColors.NavyDark)
+                    ) {
+                        Text(
+                            text = "⏭ TUR BİTİR",
+                            color = BoardColors.NavyDark,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(BoardColors.SurfaceSubtle)
+                            .border(1.dp, BoardColors.BorderSubtle, RoundedCornerShape(7.dp))
+                            .clickable(onClick = onOpenLog),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
+                            contentDescription = "Muharebe Günlüğü",
+                            tint = BoardColors.NavyDark,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Geniş Tablet / Masaüstü (EXPANDED_TABLET) ekranlarda iki haritanın sağında sabit olarak yer alan
+ * "Taktik İstihbarat & Canlı Muharebe Günlüğü" sütunu.
+ */
+@Composable
+private fun TacticalIntelAndLogSidePanel(
+    battleState: DualBattleUiState,
+    isDeltaAlive: Boolean,
+    isFlagshipAlive: Boolean,
+    isCarrierAlive: Boolean,
+    onOpenFullLog: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = BoardColors.PureWhite),
+        shape = RoundedCornerShape(16.dp),
+        border = androidx.compose.foundation.BorderStroke(1.2.dp, BoardColors.BorderSubtle),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Başlık
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "📡 TAKTİK İSTİHBARAT",
+                        color = BoardColors.NavyDark,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = "Canlı Telemetri & Günlük",
+                        color = BoardColors.TextSecondary,
+                        fontSize = 7.5.sp
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(BoardColors.SurfaceSubtle)
+                        .border(0.8.dp, BoardColors.BorderSubtle, RoundedCornerShape(6.dp))
+                        .clickable(onClick = onOpenFullLog),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
+                        contentDescription = "Tam Günlük",
+                        tint = BoardColors.NavyDark,
+                        modifier = Modifier.size(14.dp)
                     )
                 }
             }
 
-            // ORTA KOMUTA KONSOLU
-            CombatActionConsole(
-                selectedCoord = battleState.selectedAttackCoord,
-                commandPoints = battleState.commandPoints,
-                isPlayerTurn = battleState.isPlayerTurn && !isAiThinking,
-                isCarrierAlive = isCarrierAlive,
-                onFire = onFire,
-                onDroneScan = onDroneScan,
-                onShield = onShield,
-                onEndTurn = onEndTurn,
-                onOpenLog = onOpenCombatLog
+            // Özel Sistemler & Mühimmat Özeti
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = BoardColors.SurfaceSubtle,
+                shape = RoundedCornerShape(10.dp),
+                border = androidx.compose.foundation.BorderStroke(0.8.dp, BoardColors.BorderSubtle)
+            ) {
+                Column(
+                    modifier = Modifier.padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    IntelRowItem(
+                        label = "🛡️ Aegis Kubbe",
+                        value = "${battleState.friendlyShieldDomes.size}/${battleState.customRules.maxShieldDomes} Aktif",
+                        valueColor = BoardColors.NavyAccent
+                    )
+                    IntelRowItem(
+                        label = "⚡ İyon Şoku",
+                        value = if (isDeltaAlive) "${battleState.playerRemainingEmpStrikes} Hak" else "Devre Dışı",
+                        valueColor = if (isDeltaAlive) Color(0xFF0284C7) else BoardColors.TextMuted
+                    )
+                    IntelRowItem(
+                        label = "💥 Amiral Salvo",
+                        value = if (isFlagshipAlive) "${battleState.playerRemainingLineBarrages} Hak" else "Devre Dışı",
+                        valueColor = if (isFlagshipAlive) BoardColors.CrimsonRed else BoardColors.TextMuted
+                    )
+                    IntelRowItem(
+                        label = "📡 İHA Radarı",
+                        value = if (isCarrierAlive) "Çevrimiçi" else "Kilitli",
+                        valueColor = if (isCarrierAlive) BoardColors.PurplePrimary else BoardColors.TextMuted
+                    )
+                }
+            }
+
+            Text(
+                text = "📜 SON MUHAREBE KAYITLARI",
+                color = BoardColors.NavyDark,
+                fontSize = 8.5.sp,
+                fontWeight = FontWeight.ExtraBold,
+                fontFamily = FontFamily.Monospace
             )
 
-            // ALT HARİTA: DOST FİLO HARİTASI (KOMPAKT SAVUNMA İZLEME SAHASI)
-            BoardContainerCard(
-                title = "🛡️ DOST FİLO HARİTASI",
-                subtitle = "Filo durumu ve savunma kalkanı",
-                badgeText = "DOST: $aliveFriendlyShips/4",
-                badgeColor = BoardColors.NavyAccent,
-                borderColor = BoardColors.NavyAccent.copy(alpha = 0.65f),
-                isAttackBoard = false,
-                isCompactCard = true,
-                footerContent = {
-                    FleetMiniStatusRow(
-                        label = "FİLOMUZ:",
-                        ships = battleState.friendlyShips,
-                        activeColor = BoardColors.NavyAccent
-                    )
-                },
-                modifier = Modifier.weight(0.30f).fillMaxWidth()
+            // Canlı Muharebe Günlüğü Akışı
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                HexBoardCanvas(
-                    state = friendlyDefenseBoardState,
-                    modifier = Modifier.fillMaxSize(),
-                    onHexClicked = onFriendlyHexClicked
-                )
+                val recentLogs = battleState.structuredLogs.take(14)
+                if (recentLogs.isEmpty()) {
+                    Text(
+                        text = "Henüz atış kaydı yok. İlk hamleyi yapın.",
+                        color = BoardColors.TextMuted,
+                        fontSize = 8.sp
+                    )
+                } else {
+                    for (entry in recentLogs) {
+                        val isPlayer = entry.isFriendly
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = if (isPlayer) Color(0xFFF8FAFC) else Color(0xFFFFF1F2),
+                            shape = RoundedCornerShape(7.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                0.7.dp,
+                                if (isPlayer) BoardColors.BorderSubtle else Color(0xFFFECDD3)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                                Text(
+                                    text = "T${entry.turnNumber} • ${entry.resultTitle}",
+                                    color = if (isPlayer) BoardColors.NavyDark else BoardColors.CrimsonRed,
+                                    fontSize = 7.8.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = entry.detailMessage,
+                                    color = BoardColors.TextSecondary,
+                                    fontSize = 7.2.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun IntelRowItem(
+    label: String,
+    value: String,
+    valueColor: Color
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            color = BoardColors.TextSecondary,
+            fontSize = 7.8.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = value,
+            color = valueColor,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.ExtraBold,
+            fontFamily = FontFamily.Monospace
+        )
     }
 }
 
@@ -3172,7 +4222,7 @@ private fun BoardContainerCard(
                             .background(if (isAttackBoard) BoardColors.CrimsonRed else BoardColors.NavyAccent)
                     )
 
-                    // İkon Rozeti
+                    // İkon Rozeti (Saldırı Haritasında 3D Target PNG, Savunma Haritasında Kalkan İkonu)
                     Box(
                         modifier = Modifier
                             .size(if (isCompactCard) 22.dp else 28.dp)
@@ -3183,17 +4233,27 @@ private fun BoardContainerCard(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = if (isAttackBoard) Icons.Default.Radar else Icons.Default.Shield,
-                            contentDescription = null,
-                            tint = if (isAttackBoard) BoardColors.CrimsonRed else BoardColors.NavyAccent,
-                            modifier = Modifier.size(if (isCompactCard) 12.dp else 16.dp)
-                        )
+                        if (isAttackBoard) {
+                            Image(
+                                painter = painterResource(R.drawable.ic_target_3d),
+                                contentDescription = "Hedef Radarı",
+                                modifier = Modifier.size(if (isCompactCard) 15.dp else 20.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Shield,
+                                contentDescription = null,
+                                tint = BoardColors.NavyAccent,
+                                modifier = Modifier.size(if (isCompactCard) 12.dp else 16.dp)
+                            )
+                        }
                     }
 
+                    val cleanTitle = title.replace("🎯", "").trim()
                     Column {
                         Text(
-                            text = title,
+                            text = cleanTitle,
                             color = BoardColors.NavyDark,
                             fontSize = if (isCompactCard) 8.5.sp else 10.sp,
                             fontWeight = FontWeight.Black,
@@ -3212,32 +4272,82 @@ private fun BoardContainerCard(
                     }
                 }
 
-                // Sağ Durum Rozeti (Cyber-Tactical Status Badge - User Requirement 6)
+                // Sağ Durum ve Skor Rozeti (Material 3 Segmented Tactical Score Chip - User Requirement 5)
+                val badgeParts = remember(badgeText) {
+                    if (badgeText.contains(":")) {
+                        val split = badgeText.split(":", limit = 2)
+                        split[0].trim() to split[1].trim().replace(" GEMİ", "")
+                    } else {
+                        "FİLO" to badgeText.trim()
+                    }
+                }
                 Surface(
-                    color = if (isAttackBoard) Color(0xFFFFF1F2) else Color(0xFFEFF6FF),
-                    shape = RoundedCornerShape(8.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, badgeColor.copy(alpha = 0.65f)),
-                    shadowElevation = 1.dp
+                    color = BoardColors.PureWhite,
+                    shape = RoundedCornerShape(if (isCompactCard) 9.dp else 11.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.2.dp,
+                        badgeColor.copy(alpha = 0.50f)
+                    ),
+                    shadowElevation = 1.5.dp
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = if (isCompactCard) 6.dp else 9.dp, vertical = if (isCompactCard) 2.dp else 4.dp),
+                        modifier = Modifier.padding(
+                            start = if (isCompactCard) 6.dp else 8.dp,
+                            end = if (isCompactCard) 3.dp else 4.dp,
+                            top = if (isCompactCard) 2.5.dp else 3.5.dp,
+                            bottom = if (isCompactCard) 2.5.dp else 3.5.dp
+                        ),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(if (isCompactCard) 4.dp else 6.dp)
                     ) {
+                        // Çift Halkalı Canlı Taktik Radar Noktası
                         Box(
                             modifier = Modifier
-                                .size(if (isCompactCard) 5.dp else 7.dp)
+                                .size(if (isCompactCard) 10.dp else 12.dp)
                                 .clip(CircleShape)
-                                .background(badgeColor)
-                        )
+                                .background(badgeColor.copy(alpha = 0.20f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(if (isCompactCard) 5.dp else 6.dp)
+                                    .clip(CircleShape)
+                                    .background(badgeColor)
+                            )
+                        }
+
                         Text(
-                            text = badgeText,
-                            color = badgeColor,
-                            fontSize = if (isCompactCard) 8.5.sp else 10.5.sp,
-                            fontWeight = FontWeight.Black,
+                            text = badgeParts.first,
+                            color = BoardColors.NavyDark,
+                            fontSize = if (isCompactCard) 7.8.sp else 9.sp,
+                            fontWeight = FontWeight.ExtraBold,
                             fontFamily = FontFamily.Monospace,
-                            letterSpacing = if (isCompactCard) 0.2.sp else 0.5.sp
+                            letterSpacing = 0.3.sp,
+                            maxLines = 1,
+                            softWrap = false
                         )
+
+                        // Vurgulu Dolgulu Skor Kapsülü (Örn: 4/4)
+                        Surface(
+                            color = badgeColor,
+                            shape = RoundedCornerShape(if (isCompactCard) 6.dp else 7.dp),
+                            shadowElevation = 0.5.dp
+                        ) {
+                            Text(
+                                text = badgeParts.second,
+                                color = Color.White,
+                                fontSize = if (isCompactCard) 8.sp else 9.5.sp,
+                                fontWeight = FontWeight.Black,
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 0.4.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(
+                                    horizontal = if (isCompactCard) 5.5.dp else 7.dp,
+                                    vertical = if (isCompactCard) 1.5.dp else 2.dp
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -3460,8 +4570,8 @@ private fun CombatActionConsole(
     onEndTurn: () -> Unit,
     onOpenLog: () -> Unit
 ) {
-    val isTablet = LocalConfiguration.current.screenWidthDp >= 600
-    val btnHeight = if (isTablet) 42.dp else 38.dp
+    val isTablet = currentHexaFleetLayoutInfo().isTabletOrExpanded
+    val btnHeight = if (isTablet) 42.dp else 36.dp
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -3474,245 +4584,179 @@ private fun CombatActionConsole(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = if (isTablet) 10.dp else 5.dp, vertical = if (isTablet) 7.dp else 5.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (isTablet) 7.dp else 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (isTablet) 6.dp else 3.5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Seçili Koordinat Rozeti (Kompakt & Tek Satır Güvenli)
+            // Seçili Koordinat Rozeti (3D Target PNG İkonlu, Tek Satır & Tam Ortalı - Asla Kaymaz)
+            val hasCoord = selectedCoord != null
             Surface(
-                color = BoardColors.SurfaceSubtle,
+                color = if (hasCoord) Color(0xFFFFF1F2) else BoardColors.SurfaceSubtle,
                 shape = RoundedCornerShape(8.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, BoardColors.BorderSubtle),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (hasCoord) BoardColors.CrimsonRed.copy(alpha = 0.55f) else BoardColors.BorderSubtle
+                ),
                 modifier = Modifier.height(btnHeight)
             ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = if (isTablet) 8.dp else 5.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                Row(
+                    modifier = Modifier.padding(horizontal = if (isTablet) 9.dp else 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(if (isTablet) 4.5.dp else 3.dp)
                 ) {
-                    Text(
-                        text = if (isTablet) "NİŞANGAH" else "HEDEF",
-                        color = BoardColors.TextSecondary,
-                        fontSize = if (isTablet) 7.5.sp else 6.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        softWrap = false
+                    Image(
+                        painter = painterResource(R.drawable.ic_target_3d),
+                        contentDescription = "Hedef",
+                        modifier = Modifier.size(if (isTablet) 15.dp else 12.dp),
+                        contentScale = ContentScale.Fit
                     )
                     Text(
-                        text = if (selectedCoord != null) "(${selectedCoord.q},${selectedCoord.r})" else "SEÇİN",
-                        color = if (selectedCoord != null) BoardColors.CrimsonRed else BoardColors.TextMuted,
-                        fontSize = if (isTablet) 10.sp else 8.5.sp,
+                        text = if (selectedCoord != null) {
+                            if (isTablet) "HEDEF (${selectedCoord.q},${selectedCoord.r})" else "(${selectedCoord.q},${selectedCoord.r})"
+                        } else {
+                            "HEDEF"
+                        },
+                        color = if (hasCoord) BoardColors.CrimsonRed else BoardColors.NavyDark,
+                        fontSize = if (isTablet) 9.5.sp else 8.2.sp,
+                        lineHeight = if (isTablet) 11.sp else 9.5.sp,
                         fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace,
                         maxLines = 1,
                         softWrap = false
                     )
                 }
             }
 
-            // 1. ATEŞ ET (1 CP)
+            // 1. ATEŞ ET (1 CP) - Tek Satır & 3D Target PNG İkonlu
             val canFire = isPlayerTurn && selectedCoord != null && commandPoints >= 1
             Button(
                 onClick = onFire,
                 enabled = canFire,
-                modifier = Modifier.weight(1.08f).height(btnHeight),
+                modifier = Modifier.weight(1.06f).height(btnHeight),
                 shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 3.dp, vertical = 1.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = BoardColors.CrimsonRed,
                     disabledContainerColor = BoardColors.SurfaceSubtle
                 )
             ) {
-                if (isTablet) {
-                    Icon(
-                        imageVector = Icons.Default.GpsFixed,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_target_3d),
                         contentDescription = null,
-                        modifier = Modifier.size(13.dp),
-                        tint = if (canFire) Color.White else BoardColors.TextMuted
+                        modifier = Modifier.size(if (isTablet) 14.dp else 11.dp),
+                        contentScale = ContentScale.Fit,
+                        alpha = if (canFire) 1f else 0.45f
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(if (isTablet) 4.dp else 2.5.dp))
                     Text(
-                        text = "ATEŞ ET (1 CP)",
+                        text = if (isTablet) "ATEŞ ET (1 CP)" else "ATEŞ 1CP",
                         color = if (canFire) Color.White else BoardColors.TextMuted,
-                        fontSize = 9.5.sp,
+                        fontSize = if (isTablet) 9.5.sp else 7.6.sp,
+                        lineHeight = if (isTablet) 11.sp else 9.sp,
                         fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace,
                         maxLines = 1,
                         softWrap = false
                     )
-                } else {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "🎯 ATEŞ ET",
-                            color = if (canFire) Color.White else BoardColors.TextMuted,
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            lineHeight = 9.sp,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                        Text(
-                            text = "1 CP",
-                            color = if (canFire) Color.White.copy(alpha = 0.90f) else BoardColors.TextMuted,
-                            fontSize = 6.8.sp,
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 7.5.sp,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
                 }
             }
 
-            // 2. İHA KEŞFİ (3 CP)
+            // 2. İHA KEŞFİ (3 CP) - Tek Satır
             val canDrone = isPlayerTurn && selectedCoord != null && commandPoints >= 3 && isCarrierAlive
             Button(
                 onClick = onDroneScan,
                 enabled = canDrone,
                 modifier = Modifier.weight(1f).height(btnHeight),
                 shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 3.dp, vertical = 1.dp),
+                contentPadding = PaddingValues(horizontal = 3.dp, vertical = 0.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = BoardColors.PurplePrimary,
                     disabledContainerColor = BoardColors.SurfaceSubtle
                 )
             ) {
-                if (isTablet) {
-                    Text(
-                        text = if (isCarrierAlive) "📡 İHA (3 CP)" else "İHA (KİLİTLİ)",
-                        color = if (canDrone) Color.White else BoardColors.TextMuted,
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                } else {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "📡 İHA KEŞFİ",
-                            color = if (canDrone) Color.White else BoardColors.TextMuted,
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            lineHeight = 9.sp,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                        Text(
-                            text = if (isCarrierAlive) "3 CP" else "KİLİTLİ",
-                            color = if (canDrone) Color.White.copy(alpha = 0.90f) else BoardColors.TextMuted,
-                            fontSize = 6.8.sp,
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 7.5.sp,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
+                Text(
+                    text = if (isTablet) {
+                        if (isCarrierAlive) "📡 İHA (3 CP)" else "📡 İHA (KİLİTLİ)"
+                    } else {
+                        if (isCarrierAlive) "📡 İHA 3CP" else "📡 KİLİTLİ"
+                    },
+                    color = if (canDrone) Color.White else BoardColors.TextMuted,
+                    fontSize = if (isTablet) 9.5.sp else 7.6.sp,
+                    lineHeight = if (isTablet) 11.sp else 9.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 1,
+                    softWrap = false
+                )
             }
 
-            // 3. AEGIS KALKANI (2 CP)
+            // 3. AEGIS KALKANI (2 CP) - Tek Satır
             val canShield = isPlayerTurn && commandPoints >= 2
             Button(
                 onClick = onShield,
                 enabled = canShield,
-                modifier = Modifier.weight(1f).height(btnHeight),
+                modifier = Modifier.weight(1.04f).height(btnHeight),
                 shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 3.dp, vertical = 1.dp),
+                contentPadding = PaddingValues(horizontal = 3.dp, vertical = 0.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = BoardColors.NavyAccent,
                     disabledContainerColor = BoardColors.SurfaceSubtle
                 )
             ) {
-                if (isTablet) {
-                    Text(
-                        text = "🛡️ KALKAN (2 CP)",
-                        color = if (canShield) Color.White else BoardColors.TextMuted,
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                } else {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "🛡️ KALKAN",
-                            color = if (canShield) Color.White else BoardColors.TextMuted,
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            lineHeight = 9.sp,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                        Text(
-                            text = "2 CP",
-                            color = if (canShield) Color.White.copy(alpha = 0.90f) else BoardColors.TextMuted,
-                            fontSize = 6.8.sp,
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 7.5.sp,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
+                Text(
+                    text = if (isTablet) "🛡️ KALKAN (2 CP)" else "🛡️ KALKAN 2CP",
+                    color = if (canShield) Color.White else BoardColors.TextMuted,
+                    fontSize = if (isTablet) 9.5.sp else 7.5.sp,
+                    lineHeight = if (isTablet) 11.sp else 9.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 1,
+                    softWrap = false
+                )
             }
 
-            // 4. TURU BİTİR
+            // 4. TURU BİTİR - Tek Satır
             OutlinedButton(
                 onClick = onEndTurn,
                 enabled = isPlayerTurn,
                 modifier = Modifier.height(btnHeight),
                 shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = if (isTablet) 8.dp else 5.dp, vertical = 1.dp),
+                contentPadding = PaddingValues(horizontal = if (isTablet) 8.dp else 5.5.dp, vertical = 0.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, BoardColors.NavyDark)
             ) {
-                if (isTablet) {
-                    Icon(Icons.Default.SkipNext, contentDescription = "Turu Bitir", tint = BoardColors.NavyDark, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    if (isTablet) {
+                        Icon(
+                            Icons.Default.SkipNext,
+                            contentDescription = "Turu Bitir",
+                            tint = BoardColors.NavyDark,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                    }
                     Text(
-                        text = "TUR BİTİR",
+                        text = if (isTablet) "TUR BİTİR" else "⏭ TUR BİTİR",
                         color = BoardColors.NavyDark,
-                        fontSize = 9.sp,
+                        fontSize = if (isTablet) 9.sp else 7.4.sp,
+                        lineHeight = if (isTablet) 10.5.sp else 9.sp,
                         fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace,
                         maxLines = 1,
                         softWrap = false
                     )
-                } else {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "⏭ TUR",
-                            color = BoardColors.NavyDark,
-                            fontSize = 7.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            lineHeight = 8.5.sp,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                        Text(
-                            text = "BİTİR",
-                            color = BoardColors.NavyDark,
-                            fontSize = 6.8.sp,
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 7.5.sp,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
                 }
             }
 
-            // 5. MUHAREBE GÜNLÜĞÜ BUTONU (Özel Box Mimarisi - Asla 48dp zorlaması yapmaz)
+            // 5. MUHAREBE GÜNLÜĞÜ BUTONU
             Box(
                 modifier = Modifier
-                    .size(if (isTablet) 42.dp else 34.dp)
+                    .size(if (isTablet) 42.dp else 36.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(BoardColors.SurfaceSubtle)
                     .border(1.dp, BoardColors.BorderSubtle, RoundedCornerShape(8.dp))
@@ -3731,8 +4775,9 @@ private fun CombatActionConsole(
 }
 
 /**
- * Düşman Hedef Radarı sol üst ve sağ üst köşelerinde yer alan Kompakt Taktiksel Özel Yetenek Kartları.
- * Küçük telefon ve tablet ekranlarının tamamında peteklerin üzerine asla gelmeyecek şekilde küçültülerek optimize edilmiştir.
+ * Düşman Hedef Radarı üst şeridinde yer alan Estetik Taktiksel Özel Yetenek Kartları (İyon Şoku & Bombardıman).
+ * Haritanın üstünde kendi ayrılmış satırında yer aldığı için hiçbir ekranda peteklerin üzerine asla gelmez.
+ * Silahlardan biri seçildiğinde hemen altında 3D Target ikonlu "ATEŞ ET" butonu belirir.
  */
 @Composable
 private fun TacticalSpecialOpsOverlay(
@@ -3743,6 +4788,7 @@ private fun TacticalSpecialOpsOverlay(
     onToggleEmp: () -> Unit,
     onToggleBarrage: () -> Unit,
     onCycleBarrageDir: () -> Unit,
+    onFireSpecial: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val showEmp = battleState.customRules.maxEmpStrikes > 0
@@ -3750,120 +4796,180 @@ private fun TacticalSpecialOpsOverlay(
 
     if (!showEmp && !showBarrage) return
 
-    val isTablet = LocalConfiguration.current.screenWidthDp >= 600
+    val isTablet = currentHexaFleetLayoutInfo().isTabletOrExpanded
     val isEnemyDeltaAlive = battleState.enemyShips.none { (it.id.contains("delta") || it.name.contains("Delta")) && it.isSunk }
     val isEnemyFlagshipAlive = battleState.enemyShips.none { (it.id.contains("flagship") || it.name.contains("Amiral")) && it.isSunk }
+    val selectedCoord = battleState.selectedAttackCoord
 
-    Box(
-        modifier = modifier.fillMaxWidth()
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = if (isTablet) 6.dp else 3.dp, vertical = if (isTablet) 3.dp else 1.5.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
     ) {
         // 1. SOL ÜST KÖŞE: DELTA KRUVAZÖRÜ: İYON ŞOKU / EMP (0 CP)
         if (showEmp) {
             val isEmpActive = battleState.activeSpecialMode == SpecialActionMode.EMP_STRIKE
             val canUseEmp = isDeltaAlive && battleState.playerRemainingEmpStrikes > 0 && battleState.isPlayerTurn && !isAiThinking
-            val empBg = if (isEmpActive) BoardColors.PurpleLight else BoardColors.PureWhite.copy(alpha = 0.94f)
-            val empBorderColor = if (isEmpActive) Color(0xFF06B6D4) else BoardColors.BorderSubtle
+            val empAccent = Color(0xFF06B6D4)
+            val empBg = if (isEmpActive) Color(0xFFECFEFF) else BoardColors.PureWhite
+            val empBorderColor = if (isEmpActive) empAccent else BoardColors.BorderSubtle
 
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = if (isTablet) 6.dp else 2.dp, top = if (isTablet) 4.dp else 1.dp)
-                    .clip(RoundedCornerShape(if (isTablet) 8.dp else 6.dp))
-                    .clickable(enabled = canUseEmp || isEmpActive) { onToggleEmp() },
-                color = empBg,
-                shape = RoundedCornerShape(if (isTablet) 8.dp else 6.dp),
-                border = androidx.compose.foundation.BorderStroke(if (isEmpActive) 1.5.dp else 0.8.dp, empBorderColor),
-                shadowElevation = 0.dp
+            Column(
+                horizontalAlignment = Alignment.Start,
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(
-                        horizontal = if (isTablet) 6.dp else 4.dp,
-                        vertical = if (isTablet) 3.5.dp else 2.dp
-                    ),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(if (isTablet) 5.dp else 3.dp)
+                Surface(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(if (isTablet) 11.dp else 9.dp))
+                        .clickable(enabled = canUseEmp || isEmpActive) { onToggleEmp() },
+                    color = empBg,
+                    shape = RoundedCornerShape(if (isTablet) 11.dp else 9.dp),
+                    border = androidx.compose.foundation.BorderStroke(if (isEmpActive) 1.6.dp else 1.dp, empBorderColor),
+                    shadowElevation = if (isEmpActive) 2.5.dp else 1.dp
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(if (isTablet) 17.dp else 13.dp)
-                            .background(
-                                color = if (canUseEmp || isEmpActive) Color(0xFF06B6D4).copy(alpha = 0.15f) else BoardColors.SurfaceSubtle,
-                                shape = RoundedCornerShape(4.dp)
-                            )
-                            .border(
-                                width = 0.7.dp,
-                                color = if (canUseEmp || isEmpActive) Color(0xFF06B6D4).copy(alpha = 0.45f) else BoardColors.BorderSubtle,
-                                shape = RoundedCornerShape(4.dp)
-                            ),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        modifier = Modifier.padding(
+                            horizontal = if (isTablet) 9.dp else 7.dp,
+                            vertical = if (isTablet) 5.5.dp else 4.dp
+                        ),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(if (isTablet) 7.dp else 5.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.ElectricBolt,
-                            contentDescription = "EMP",
-                            tint = if (canUseEmp || isEmpActive) Color(0xFF06B6D4) else BoardColors.TextMuted,
-                            modifier = Modifier.size(if (isTablet) 10.dp else 8.5.dp)
-                        )
-                    }
+                        Box(
+                            modifier = Modifier
+                                .size(if (isTablet) 24.dp else 19.dp)
+                                .background(
+                                    color = if (canUseEmp || isEmpActive) empAccent.copy(alpha = 0.16f) else BoardColors.SurfaceSubtle,
+                                    shape = RoundedCornerShape(6.dp)
+                                )
+                                .border(
+                                    width = 0.9.dp,
+                                    color = if (canUseEmp || isEmpActive) empAccent.copy(alpha = 0.55f) else BoardColors.BorderSubtle,
+                                    shape = RoundedCornerShape(6.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ElectricBolt,
+                                contentDescription = "EMP",
+                                tint = if (canUseEmp || isEmpActive) empAccent else BoardColors.TextMuted,
+                                modifier = Modifier.size(if (isTablet) 14.dp else 11.5.dp)
+                            )
+                        }
 
-                    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "İYON ŞOKU",
+                                    fontSize = if (isTablet) 9.5.sp else 8.sp,
+                                    lineHeight = if (isTablet) 10.5.sp else 9.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = if (canUseEmp || isEmpActive) BoardColors.NavyDark else BoardColors.TextMuted,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                                Text(
+                                    text = " (0 CP)",
+                                    fontSize = if (isTablet) 8.2.sp else 7.sp,
+                                    lineHeight = if (isTablet) 9.sp else 8.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = if (canUseEmp || isEmpActive) empAccent else BoardColors.TextMuted,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+
+                            val playerEmpText = if (!isDeltaAlive) {
+                                "Siz: Battı"
+                            } else {
+                                "Siz: ${battleState.playerRemainingEmpStrikes}/${battleState.customRules.maxEmpStrikes} Hak"
+                            }
                             Text(
-                                text = "İYON ŞOKU",
-                                fontSize = if (isTablet) 8.sp else 6.5.sp,
-                                lineHeight = if (isTablet) 9.sp else 7.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = if (canUseEmp || isEmpActive) BoardColors.NavyDark else BoardColors.TextMuted,
+                                text = playerEmpText,
+                                fontSize = if (isTablet) 7.8.sp else 6.8.sp,
+                                lineHeight = if (isTablet) 8.8.sp else 7.8.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (!isDeltaAlive) BoardColors.CrimsonRed else BoardColors.TextSecondary,
                                 maxLines = 1,
                                 softWrap = false
                             )
+
+                            val enemyEmpText = when {
+                                !isEnemyDeltaAlive -> "Rakip: Battı"
+                                battleState.enemyRemainingEmpStrikes == 0 -> "Rakip: 0/${battleState.customRules.maxEmpStrikes}"
+                                else -> "Rakip: ${battleState.enemyRemainingEmpStrikes}/${battleState.customRules.maxEmpStrikes} Hak"
+                            }
+                            val enemyEmpColor = when {
+                                !isEnemyDeltaAlive -> BoardColors.CrimsonRed
+                                battleState.enemyRemainingEmpStrikes == 0 -> Color(0xFFDC2626)
+                                else -> Color(0xFF15803D)
+                            }
                             Text(
-                                text = " (0 CP)",
-                                fontSize = if (isTablet) 7.sp else 5.8.sp,
-                                lineHeight = if (isTablet) 8.sp else 6.5.sp,
+                                text = enemyEmpText,
+                                fontSize = if (isTablet) 7.8.sp else 6.8.sp,
+                                lineHeight = if (isTablet) 8.8.sp else 7.8.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (canUseEmp || isEmpActive) Color(0xFF06B6D4) else BoardColors.TextMuted,
+                                color = enemyEmpColor,
                                 maxLines = 1,
                                 softWrap = false
                             )
                         }
+                    }
+                }
 
-                        val playerEmpText = if (!isDeltaAlive) {
-                            "Siz: Battı"
-                        } else {
-                            "Siz: ${battleState.playerRemainingEmpStrikes}/${battleState.customRules.maxEmpStrikes} Hak"
+                // İyon Şoku seçildiğinde hemen altında beliren estetik "ATEŞ ET" butonu
+                AnimatedVisibility(visible = isEmpActive) {
+                    val canFireEmpNow = selectedCoord != null && canUseEmp
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(7.dp))
+                            .clickable(enabled = canFireEmpNow) { onFireSpecial() },
+                        color = if (canFireEmpNow) empAccent else BoardColors.SurfaceSubtle,
+                        shape = RoundedCornerShape(7.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (canFireEmpNow) Color(0xFF0891B2) else empAccent.copy(alpha = 0.6f)
+                        ),
+                        shadowElevation = if (canFireEmpNow) 2.dp else 0.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(
+                                horizontal = if (isTablet) 9.dp else 7.dp,
+                                vertical = if (isTablet) 4.dp else 3.dp
+                            ),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Image(
+                                painter = painterResource(R.drawable.ic_target_3d),
+                                contentDescription = null,
+                                modifier = Modifier.size(if (isTablet) 13.dp else 11.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                            Text(
+                                text = if (selectedCoord != null) {
+                                    "ATEŞ ET (${selectedCoord.q},${selectedCoord.r})"
+                                } else {
+                                    "HEDEF SEÇİN"
+                                },
+                                color = if (canFireEmpNow) Color.White else BoardColors.NavyDark,
+                                fontSize = if (isTablet) 8.5.sp else 7.4.sp,
+                                lineHeight = if (isTablet) 9.5.sp else 8.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1,
+                                softWrap = false
+                            )
                         }
-                        Text(
-                            text = playerEmpText,
-                            fontSize = if (isTablet) 6.8.sp else 5.6.sp,
-                            lineHeight = if (isTablet) 7.5.sp else 6.2.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (!isDeltaAlive) BoardColors.CrimsonRed else BoardColors.TextSecondary,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-
-                        val enemyEmpText = when {
-                            !isEnemyDeltaAlive -> "Rakip: Battı"
-                            battleState.enemyRemainingEmpStrikes == 0 -> "Rakip: 0/${battleState.customRules.maxEmpStrikes}"
-                            else -> "Rakip: ${battleState.enemyRemainingEmpStrikes}/${battleState.customRules.maxEmpStrikes} Hak"
-                        }
-                        val enemyEmpColor = when {
-                            !isEnemyDeltaAlive -> BoardColors.CrimsonRed
-                            battleState.enemyRemainingEmpStrikes == 0 -> Color(0xFFDC2626)
-                            else -> Color(0xFF15803D)
-                        }
-                        Text(
-                            text = enemyEmpText,
-                            fontSize = if (isTablet) 6.8.sp else 5.6.sp,
-                            lineHeight = if (isTablet) 7.5.sp else 6.2.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = enemyEmpColor,
-                            maxLines = 1,
-                            softWrap = false
-                        )
                     }
                 }
             }
+        } else {
+            Spacer(modifier = Modifier.width(1.dp))
         }
 
         // 2. SAĞ ÜST KÖŞE: AMİRAL ZIRHLISI: 5'Lİ AĞIR BOMBARDIMAN (3 CP)
@@ -3871,44 +4977,41 @@ private fun TacticalSpecialOpsOverlay(
             val isBarrageActive = battleState.activeSpecialMode == SpecialActionMode.LINE_BARRAGE
             val canUseBarrage = isFlagshipAlive && battleState.playerRemainingLineBarrages > 0 &&
                 battleState.commandPoints >= 3 && battleState.isPlayerTurn && !isAiThinking
-            val barrageBg = if (isBarrageActive) BoardColors.RedLight else BoardColors.PureWhite.copy(alpha = 0.94f)
+            val barrageBg = if (isBarrageActive) BoardColors.RedLight else BoardColors.PureWhite
             val barrageBorderColor = if (isBarrageActive) BoardColors.CrimsonRed else BoardColors.BorderSubtle
 
             Column(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(end = if (isTablet) 6.dp else 2.dp, top = if (isTablet) 4.dp else 1.dp),
                 horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 Surface(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(if (isTablet) 8.dp else 6.dp))
+                        .clip(RoundedCornerShape(if (isTablet) 11.dp else 9.dp))
                         .clickable(enabled = canUseBarrage || isBarrageActive) { onToggleBarrage() },
                     color = barrageBg,
-                    shape = RoundedCornerShape(if (isTablet) 8.dp else 6.dp),
-                    border = androidx.compose.foundation.BorderStroke(if (isBarrageActive) 1.5.dp else 0.8.dp, barrageBorderColor),
-                    shadowElevation = 0.dp
+                    shape = RoundedCornerShape(if (isTablet) 11.dp else 9.dp),
+                    border = androidx.compose.foundation.BorderStroke(if (isBarrageActive) 1.6.dp else 1.dp, barrageBorderColor),
+                    shadowElevation = if (isBarrageActive) 2.5.dp else 1.dp
                 ) {
                     Row(
                         modifier = Modifier.padding(
-                            horizontal = if (isTablet) 6.dp else 4.dp,
-                            vertical = if (isTablet) 3.5.dp else 2.dp
+                            horizontal = if (isTablet) 9.dp else 7.dp,
+                            vertical = if (isTablet) 5.5.dp else 4.dp
                         ),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(if (isTablet) 5.dp else 3.dp)
+                        horizontalArrangement = Arrangement.spacedBy(if (isTablet) 7.dp else 5.dp)
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(if (isTablet) 17.dp else 13.dp)
+                                .size(if (isTablet) 24.dp else 19.dp)
                                 .background(
-                                    color = if (canUseBarrage || isBarrageActive) BoardColors.CrimsonRed.copy(alpha = 0.12f) else BoardColors.SurfaceSubtle,
-                                    shape = RoundedCornerShape(4.dp)
+                                    color = if (canUseBarrage || isBarrageActive) BoardColors.CrimsonRed.copy(alpha = 0.14f) else BoardColors.SurfaceSubtle,
+                                    shape = RoundedCornerShape(6.dp)
                                 )
                                 .border(
-                                    width = 0.7.dp,
-                                    color = if (canUseBarrage || isBarrageActive) BoardColors.CrimsonRed.copy(alpha = 0.45f) else BoardColors.BorderSubtle,
-                                    shape = RoundedCornerShape(4.dp)
+                                    width = 0.9.dp,
+                                    color = if (canUseBarrage || isBarrageActive) BoardColors.CrimsonRed.copy(alpha = 0.55f) else BoardColors.BorderSubtle,
+                                    shape = RoundedCornerShape(6.dp)
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
@@ -3916,26 +5019,28 @@ private fun TacticalSpecialOpsOverlay(
                                 imageVector = Icons.Default.AutoAwesome,
                                 contentDescription = "Line Barrage",
                                 tint = if (canUseBarrage || isBarrageActive) BoardColors.CrimsonRed else BoardColors.TextMuted,
-                                modifier = Modifier.size(if (isTablet) 10.dp else 8.5.dp)
+                                modifier = Modifier.size(if (isTablet) 14.dp else 11.5.dp)
                             )
                         }
 
-                        Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = "BOMBARDIMAN",
-                                    fontSize = if (isTablet) 8.sp else 6.5.sp,
-                                    lineHeight = if (isTablet) 9.sp else 7.sp,
+                                    fontSize = if (isTablet) 9.5.sp else 8.sp,
+                                    lineHeight = if (isTablet) 10.5.sp else 9.sp,
                                     fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace,
                                     color = if (canUseBarrage || isBarrageActive) BoardColors.NavyDark else BoardColors.TextMuted,
                                     maxLines = 1,
                                     softWrap = false
                                 )
                                 Text(
                                     text = " (3 CP)",
-                                    fontSize = if (isTablet) 7.sp else 5.8.sp,
-                                    lineHeight = if (isTablet) 8.sp else 6.5.sp,
-                                    fontWeight = FontWeight.Bold,
+                                    fontSize = if (isTablet) 8.2.sp else 7.sp,
+                                    lineHeight = if (isTablet) 9.sp else 8.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace,
                                     color = if (canUseBarrage || isBarrageActive) BoardColors.CrimsonRed else BoardColors.TextMuted,
                                     maxLines = 1,
                                     softWrap = false
@@ -3949,8 +5054,8 @@ private fun TacticalSpecialOpsOverlay(
                             }
                             Text(
                                 text = playerBarrageText,
-                                fontSize = if (isTablet) 6.8.sp else 5.6.sp,
-                                lineHeight = if (isTablet) 7.5.sp else 6.2.sp,
+                                fontSize = if (isTablet) 7.8.sp else 6.8.sp,
+                                lineHeight = if (isTablet) 8.8.sp else 7.8.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (!isFlagshipAlive) BoardColors.CrimsonRed else BoardColors.TextSecondary,
                                 maxLines = 1,
@@ -3969,8 +5074,8 @@ private fun TacticalSpecialOpsOverlay(
                             }
                             Text(
                                 text = enemyBarrageText,
-                                fontSize = if (isTablet) 6.8.sp else 5.6.sp,
-                                lineHeight = if (isTablet) 7.5.sp else 6.2.sp,
+                                fontSize = if (isTablet) 7.8.sp else 6.8.sp,
+                                lineHeight = if (isTablet) 8.8.sp else 7.8.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = enemyBarrageColor,
                                 maxLines = 1,
@@ -3980,31 +5085,86 @@ private fun TacticalSpecialOpsOverlay(
                     }
                 }
 
-                // Bombardıman aktifken hat doğrultusu değiştirici düğme (Hemen altında sağa hizalı)
-                if (showBarrage && battleState.activeSpecialMode == SpecialActionMode.LINE_BARRAGE) {
+                // Bombardıman aktifken hat doğrultusu değiştirici + estetik "ATEŞ ET" butonu
+                AnimatedVisibility(visible = isBarrageActive) {
                     val dirLabel = when (battleState.lineBarrageDirectionIndex % 3) {
                         0 -> "── Yatay"
                         1 -> "╱ Çapraz R"
                         else -> "╲ Çapraz L"
                     }
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(5.dp))
-                            .clickable { onCycleBarrageDir() },
-                        color = BoardColors.PureWhite,
-                        shape = RoundedCornerShape(5.dp),
-                        border = androidx.compose.foundation.BorderStroke(0.8.dp, BoardColors.CrimsonRed),
-                        shadowElevation = 0.dp
+                    val canFireBarrageNow = selectedCoord != null && canUseBarrage
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "YÖN: $dirLabel 🔄",
-                            color = BoardColors.CrimsonRed,
-                            fontSize = if (isTablet) 7.5.sp else 6.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            softWrap = false,
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                        )
+                        Surface(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(7.dp))
+                                .clickable { onCycleBarrageDir() },
+                            color = BoardColors.PureWhite,
+                            shape = RoundedCornerShape(7.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BoardColors.CrimsonRed),
+                            shadowElevation = 1.dp
+                        ) {
+                            Text(
+                                text = "YÖN: $dirLabel 🔄",
+                                color = BoardColors.CrimsonRed,
+                                fontSize = if (isTablet) 8.sp else 7.sp,
+                                lineHeight = if (isTablet) 9.sp else 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(
+                                    horizontal = if (isTablet) 7.dp else 5.5.dp,
+                                    vertical = if (isTablet) 4.dp else 3.dp
+                                )
+                            )
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(7.dp))
+                                .clickable(enabled = canFireBarrageNow) { onFireSpecial() },
+                            color = if (canFireBarrageNow) BoardColors.CrimsonRed else BoardColors.SurfaceSubtle,
+                            shape = RoundedCornerShape(7.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (canFireBarrageNow) Color(0xFFB91C1C) else BoardColors.CrimsonRed.copy(alpha = 0.6f)
+                            ),
+                            shadowElevation = if (canFireBarrageNow) 2.dp else 0.dp
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(
+                                    horizontal = if (isTablet) 8.dp else 6.5.dp,
+                                    vertical = if (isTablet) 4.dp else 3.dp
+                                ),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.5.dp)
+                            ) {
+                                Image(
+                                    painter = painterResource(R.drawable.ic_target_3d),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(if (isTablet) 13.dp else 11.dp),
+                                    contentScale = ContentScale.Fit
+                                )
+                                Text(
+                                    text = if (selectedCoord != null) {
+                                        "ATEŞ ET (${selectedCoord.q},${selectedCoord.r})"
+                                    } else {
+                                        "HEDEF SEÇİN"
+                                    },
+                                    color = if (canFireBarrageNow) Color.White else BoardColors.NavyDark,
+                                    fontSize = if (isTablet) 8.5.sp else 7.4.sp,
+                                    lineHeight = if (isTablet) 9.5.sp else 8.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -4041,7 +5201,7 @@ private fun VictoryDefeatDialog(
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
-    val isTablet = configuration.screenWidthDp >= 600
+    val isTablet = currentHexaFleetLayoutInfo().isTabletOrExpanded
 
     // Pencere açıldığında zafer veya bozgun müziğini 1 kez çal ve kazanılan rozetleri kaydet
     DisposableEffect(isWin) {
@@ -4959,12 +6119,13 @@ private fun generateRandomFleet(
 
 /**
  * 3 Seviyeli Yapay Zeka (Recruit, Veteran, Grand Admiral) için Dost Harita üzerinde hedef seçici.
+ * 60 ve 120 FPS akıcılığını korumak için CPU yoğun permütasyonlar Dispatchers.Default üzerinde çalıştırılır.
  */
-private fun selectAiTargetOnPlayerBoard(
+private suspend fun selectAiTargetOnPlayerBoard(
     state: DualBattleUiState,
     availableTargets: List<HexCoordinate>,
     difficulty: AiDifficulty
-): HexCoordinate {
+): HexCoordinate = withContext(Dispatchers.Default) {
     // Henüz batmamış ama vurulmuş dost gemi parçaları (Aktif İsabetler)
     val activeHitCoords = state.friendlyShips
         .filter { !it.isSunk && it.hitParts.isNotEmpty() }
@@ -4974,7 +6135,7 @@ private fun selectAiTargetOnPlayerBoard(
         AiDifficulty.RECRUIT -> {
             // Acemi: %35 ihtimalle vurulan parçanın komşusunu yoklar, %65 rastgele atar
             val neighbors = activeHitCoords.flatMap { it.allNeighbors() }.filter { it in availableTargets }
-            return if (neighbors.isNotEmpty() && Random.nextFloat() < 0.35f) {
+            if (neighbors.isNotEmpty() && Random.nextFloat() < 0.35f) {
                 neighbors.random()
             } else {
                 availableTargets.random()
@@ -4985,10 +6146,10 @@ private fun selectAiTargetOnPlayerBoard(
             // Kıdemli Taktikçi: Aktif isabet varsa 6 komşuyu veya doğrultuyu takip eder; yoksa parite taraması yapar
             if (activeHitCoords.isNotEmpty()) {
                 val neighbors = activeHitCoords.flatMap { it.allNeighbors() }.filter { it in availableTargets }
-                if (neighbors.isNotEmpty()) return neighbors.random()
+                if (neighbors.isNotEmpty()) return@withContext neighbors.random()
             }
             val parityTargets = availableTargets.filter { (it.q + it.r) % 2 == 0 }
-            return if (parityTargets.isNotEmpty()) parityTargets.random() else availableTargets.random()
+            if (parityTargets.isNotEmpty()) parityTargets.random() else availableTargets.random()
         }
 
         AiDifficulty.GRAND_ADMIRAL -> {
@@ -5027,7 +6188,7 @@ private fun selectAiTargetOnPlayerBoard(
 
             val maxScore = scores.values.maxOrNull() ?: 0
             val bestCandidates = scores.filter { it.value == maxScore }.keys.toList()
-            return if (bestCandidates.isNotEmpty()) bestCandidates.random() else availableTargets.random()
+            if (bestCandidates.isNotEmpty()) bestCandidates.random() else availableTargets.random()
         }
     }
 }

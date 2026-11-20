@@ -8,7 +8,8 @@ enum class RoomStatus {
     WAITING_FOR_OPPONENT, // Lobi kuruldu, rakip bekleniyor
     FLEET_SETUP,          // İki oyuncu da odada, filo dizilimi & hash değiş tokuşu yapılıyor
     IN_GAME,              // Maç devam ediyor
-    FINISHED              // Maç bitti, audit logları açıldı
+    FINISHED,             // Maç bitti, audit logları açıldı
+    FORFEITED             // Rakip maçı terk etti veya kalp atışı (heartbeat) zaman aşımına uğradı
 }
 
 @Serializable
@@ -27,7 +28,8 @@ data class LobbyRoom(
     val guestCommitmentHash: String? = null,
     val currentTurnPlayerId: String = hostPlayerId,
     val turnNumber: Int = 1,
-    val lastHeartbeatTimestamp: Long = System.currentTimeMillis()
+    val lastHeartbeatTimestamp: Long = System.currentTimeMillis(),
+    val forfeitedPlayerId: String? = null
 ) {
     val isPinProtected: Boolean get() = pinHash != null
     val isFull: Boolean get() = guestPlayerId != null
